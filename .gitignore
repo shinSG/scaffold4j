@@ -30,4 +30,14 @@ logs/
 # --- Environment ---
 .env
 .env.local
+.env.*.local
 application-local.yml
+
+# --- Generated / Build helper files ---
+dependency-reduced-pom.xml
+
+# --- Temp ---
+tmp/
+temp/
+*.tmp
+my-ai-app/

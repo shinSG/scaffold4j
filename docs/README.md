@@ -16,9 +16,9 @@
 
 ## 简介
 
-**scaffold4j** 是一个 Java AI 应用脚手架工具，通过一行命令快速生成生产级的多模块 Maven 项目骨架。无需手动搭建项目结构，无需关心 Spring AI、LangChain4j、MCP、A2A 等框架的集成细节，scaffold4j 全部帮你处理。
+**scaffold4j** 是一个 Java AI 应用脚手架工具，通过一行命令快速生成生产级的多模块 Maven 项目骨架。
 
-### 一句话生成 AI 项目
+### 生成项目
 
 ```bash
 scaffold4j generate --name=my-ai-app --package=com.example.ai --protocols=rest,mcp --llm-providers=openai,ollama
