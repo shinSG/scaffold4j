@@ -35,10 +35,27 @@ public class ProjectConfig {
     // ---- Feature flags ----
     private Set<Feature> features = new LinkedHashSet<>();
 
-    // ---- Nacos ----
-    private boolean nacosEnabled = false;
+    // ---- Nacos (backward-compat: nacosDiscoveryEnabled + nacosConfigEnabled replace old nacosEnabled) ----
+    private boolean nacosDiscoveryEnabled = false;
+    private boolean nacosConfigEnabled = false;
     private String nacosAddr = "localhost:8848";
     private String nacosNamespace = "";
+
+    // ---- Database ----
+    private DatabaseType dbType = DatabaseType.H2;
+    private String dbHost = "localhost";
+    private int dbPort = 0; // 0 means use default for dbType
+    private String dbName;
+    private String dbUsername = "root";
+    private String dbPassword = "root";
+    private OrmType ormType = OrmType.MYBATIS_PLUS;
+
+    // ---- Cache ----
+    private CacheType cacheType = CacheType.NONE;
+    private String redisHost = "localhost";
+    private int redisPort = 6379;
+    private String redisPassword;
+    private int redisDatabase = 0;
 
     // ---- Output ----
     private String outputDir = "./";
@@ -76,11 +93,37 @@ public class ProjectConfig {
     public boolean hasFeature(Feature f) { return features.contains(f); }
     public boolean hasLLMProvider(LLMProvider p) { return llmProviders.contains(p); }
     public boolean usesSpringAI() {
-        return aiFramework == AIFramework.SPRING_AI || aiFramework == AIFramework.BOTH;
+        return aiFramework == AIFramework.SPRING_AI
+                || aiFramework == AIFramework.SPRING_AI_ALIBABA
+                || aiFramework == AIFramework.BOTH;
+    }
+    public boolean usesSpringAIAlibaba() {
+        return aiFramework == AIFramework.SPRING_AI_ALIBABA;
     }
     public boolean usesLangChain4j() {
         return aiFramework == AIFramework.LANGCHAIN4J || aiFramework == AIFramework.BOTH;
     }
+
+    // ---- Database checks ----
+    public boolean hasDatabase() { return dbType != null; }
+    public boolean usesMyBatisPlus() { return hasDatabase() && ormType == OrmType.MYBATIS_PLUS; }
+    public boolean usesJpa() { return hasDatabase() && ormType == OrmType.JPA; }
+    public int effectiveDbPort() {
+        return dbPort > 0 ? dbPort : dbType.defaultPort();
+    }
+    public String effectiveDbName() {
+        return (dbName != null && !dbName.isBlank()) ? dbName : name;
+    }
+
+    // ---- Cache checks ----
+    public boolean hasRedisCache() { return cacheType == CacheType.REDIS; }
+    public boolean hasCaffeineCache() { return cacheType == CacheType.CAFFEINE; }
+    public boolean hasCache() { return cacheType != CacheType.NONE; }
+
+    // ---- Nacos checks ----
+    public boolean hasNacosDiscovery() { return nacosDiscoveryEnabled; }
+    public boolean hasNacosConfig() { return nacosConfigEnabled; }
+    public boolean hasNacos() { return nacosDiscoveryEnabled || nacosConfigEnabled; }
 
     /**
      * Validate the configuration for completeness and consistency.
@@ -131,9 +174,23 @@ public class ProjectConfig {
     public ProjectConfig addProtocol(Protocol v) { this.protocols.add(v); return this; }
     public ProjectConfig features(Set<Feature> v) { this.features = v; return this; }
     public ProjectConfig addFeature(Feature v) { this.features.add(v); return this; }
-    public ProjectConfig nacosEnabled(boolean v) { this.nacosEnabled = v; return this; }
+    public ProjectConfig nacosEnabled(boolean v) { this.nacosDiscoveryEnabled = v; this.nacosConfigEnabled = v; return this; }
+    public ProjectConfig nacosDiscoveryEnabled(boolean v) { this.nacosDiscoveryEnabled = v; return this; }
+    public ProjectConfig nacosConfigEnabled(boolean v) { this.nacosConfigEnabled = v; return this; }
     public ProjectConfig nacosAddr(String v) { this.nacosAddr = v; return this; }
     public ProjectConfig nacosNamespace(String v) { this.nacosNamespace = v; return this; }
+    public ProjectConfig dbType(DatabaseType v) { this.dbType = v; return this; }
+    public ProjectConfig dbHost(String v) { this.dbHost = v; return this; }
+    public ProjectConfig dbPort(int v) { this.dbPort = v; return this; }
+    public ProjectConfig dbName(String v) { this.dbName = v; return this; }
+    public ProjectConfig dbUsername(String v) { this.dbUsername = v; return this; }
+    public ProjectConfig dbPassword(String v) { this.dbPassword = v; return this; }
+    public ProjectConfig ormType(OrmType v) { this.ormType = v; return this; }
+    public ProjectConfig cacheType(CacheType v) { this.cacheType = v; return this; }
+    public ProjectConfig redisHost(String v) { this.redisHost = v; return this; }
+    public ProjectConfig redisPort(int v) { this.redisPort = v; return this; }
+    public ProjectConfig redisPassword(String v) { this.redisPassword = v; return this; }
+    public ProjectConfig redisDatabase(int v) { this.redisDatabase = v; return this; }
     public ProjectConfig outputDir(String v) { this.outputDir = v; return this; }
 
     // ---- Getters ----
@@ -151,8 +208,22 @@ public class ProjectConfig {
     public VectorStore vectorStore() { return vectorStore; }
     public Set<Protocol> protocols() { return Collections.unmodifiableSet(protocols); }
     public Set<Feature> features() { return Collections.unmodifiableSet(features); }
-    public boolean nacosEnabled() { return nacosEnabled; }
+    public boolean nacosEnabled() { return hasNacos(); }
+    public boolean nacosDiscoveryEnabled() { return nacosDiscoveryEnabled; }
+    public boolean nacosConfigEnabled() { return nacosConfigEnabled; }
     public String nacosAddr() { return nacosAddr; }
     public String nacosNamespace() { return nacosNamespace; }
+    public DatabaseType dbType() { return dbType; }
+    public String dbHost() { return dbHost; }
+    public int dbPort() { return dbPort; }
+    public String dbName() { return dbName; }
+    public String dbUsername() { return dbUsername; }
+    public String dbPassword() { return dbPassword; }
+    public OrmType ormType() { return ormType; }
+    public CacheType cacheType() { return cacheType; }
+    public String redisHost() { return redisHost; }
+    public int redisPort() { return redisPort; }
+    public String redisPassword() { return redisPassword; }
+    public int redisDatabase() { return redisDatabase; }
     public String outputDir() { return outputDir; }
 }

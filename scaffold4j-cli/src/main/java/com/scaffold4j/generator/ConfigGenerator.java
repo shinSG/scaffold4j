@@ -117,8 +117,109 @@ public class ConfigGenerator {
                     """.formatted(config.effectiveArtifactId()));
         }
 
+        // Database configuration
+        if (config.hasDatabase()) {
+            sb.append("""
+                    # ===========================================================
+                    # DataSource Configuration
+                    # ===========================================================
+                    spring:
+                      datasource:
+                        url: ${DB_URL:%s}
+                        username: ${DB_USERNAME:%s}
+                        password: ${DB_PASSWORD:%s}
+                        driver-class-name: ${DB_DRIVER:%s}
+                        hikari:
+                          maximum-pool-size: 20
+                          minimum-idle: 5
+                          idle-timeout: 300000
+                          connection-timeout: 20000
+                          max-lifetime: 1200000
+                    """.formatted(
+                        config.dbType().jdbcUrl(config.dbHost(), config.effectiveDbPort(), config.effectiveDbName()),
+                        config.dbUsername(),
+                        config.dbPassword(),
+                        config.dbType().driverClassName()
+                    ));
+
+            if (config.usesJpa()) {
+                sb.append("""
+                          jpa:
+                            hibernate:
+                              ddl-auto: ${JPA_DDL_AUTO:update}
+                            show-sql: ${JPA_SHOW_SQL:false}
+                            open-in-view: false
+                    """);
+            }
+
+            if (config.usesMyBatisPlus()) {
+                sb.append("""
+                    # ===========================================================
+                    # MyBatis-Plus Configuration
+                    # ===========================================================
+                    mybatis-plus:
+                      mapper-locations: classpath*:/mapper/**/*.xml
+                      global-config:
+                        db-config:
+                          id-type: assign_id
+                          logic-delete-field: deleted
+                          logic-delete-value: 1
+                          logic-not-delete-value: 0
+                      configuration:
+                        map-underscore-to-camel-case: true
+                        log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+                    """);
+            }
+        }
+
+        // Cache configuration
+        if (config.hasCache()) {
+            sb.append("""
+                    # ===========================================================
+                    # Cache Configuration
+                    # ===========================================================
+                    spring:
+                      cache:
+                        type: %s
+                """.formatted(config.cacheType().id()));
+
+            if (config.hasRedisCache()) {
+                sb.append("""
+                          data:
+                            redis:
+                              host: ${REDIS_HOST:%s}
+                              port: ${REDIS_PORT:%d}
+                              password: ${REDIS_PASSWORD:%s}
+                              database: ${REDIS_DATABASE:%d}
+                              lettuce:
+                                pool:
+                                  max-active: 16
+                                  max-idle: 8
+                                  min-idle: 4
+                              timeout: 5000ms
+                        cache:
+                          redis:
+                            time-to-live: ${CACHE_TTL:3600000}
+                            cache-null-values: false
+                """.formatted(
+                        config.redisHost(),
+                        config.redisPort(),
+                        config.redisPassword() != null ? config.redisPassword() : "",
+                        config.redisDatabase()
+                ));
+            }
+
+            if (config.hasCaffeineCache()) {
+                sb.append("""
+                          cache:
+                            caffeine:
+                              spec: maximumSize=500,expireAfterAccess=600s
+                """);
+            }
+        }
+
         // Nacos configuration
-        if (config.nacosEnabled()) {
+        if (config.hasNacos()) {
             sb.append("""
                     # ===========================================================
                     # Nacos Service Discovery & Configuration
@@ -126,23 +227,35 @@ public class ConfigGenerator {
                     spring:
                       cloud:
                         nacos:
-                          discovery:
-                            enabled: ${NACOS_ENABLED:true}
-                            server-addr: ${NACOS_ADDR:%s}
-                            namespace: ${NACOS_NAMESPACE:%s}
-                            group: ${NACOS_GROUP:DEFAULT_GROUP}
-                          config:
-                            server-addr: ${NACOS_ADDR:%s}
-                            namespace: ${NACOS_NAMESPACE:%s}
-                            file-extension: yaml
-                            group: ${NACOS_GROUP:DEFAULT_GROUP}
-                      config:
-                        import: nacos:%s.yaml
-                    """.formatted(
-                        config.nacosAddr(), config.nacosNamespace(),
-                        config.nacosAddr(), config.nacosNamespace(),
-                        config.effectiveArtifactId()
-                    ));
+                """);
+
+            if (config.hasNacosDiscovery()) {
+                sb.append("""
+                              discovery:
+                                enabled: true
+                                server-addr: ${NACOS_ADDR:%s}
+                                namespace: ${NACOS_NAMESPACE:%s}
+                                group: ${NACOS_GROUP:DEFAULT_GROUP}
+                                metadata:
+                                  version: ${APP_VERSION:1.0.0}
+                    """.formatted(config.nacosAddr(), config.nacosNamespace()));
+            }
+
+            if (config.hasNacosConfig()) {
+                sb.append("""
+                              config:
+                                enabled: true
+                                server-addr: ${NACOS_ADDR:%s}
+                                namespace: ${NACOS_NAMESPACE:%s}
+                                group: ${NACOS_GROUP:DEFAULT_GROUP}
+                                file-extension: yaml
+                                refresh-enabled: true
+                                shared-configs:
+                                  - data-id: common.yaml
+                                    group: DEFAULT_GROUP
+                                    refresh: true
+                    """.formatted(config.nacosAddr(), config.nacosNamespace()));
+            }
         }
 
         // WebSocket configuration
@@ -230,6 +343,29 @@ public class ConfigGenerator {
             case MOONSHOT -> "moonshot-v1-8k";
             case DOUBAO -> "doubao-lite-128k";
         };
+    }
+
+    /**
+     * Generate bootstrap.yml for Nacos Config Center.
+     * Loaded before application.yml to connect to Nacos for config import.
+     */
+    public String generateBootstrapConfig() {
+        return """
+                # ===========================================================
+                # Bootstrap configuration — loaded before application.yml
+                # Required for Spring Cloud Config / Nacos Config Center
+                # ===========================================================
+                spring:
+                  application:
+                    name: %s
+                  cloud:
+                    nacos:
+                      config:
+                        server-addr: ${NACOS_ADDR:%s}
+                        namespace: ${NACOS_NAMESPACE:%s}
+                        file-extension: yaml
+                        group: ${NACOS_GROUP:DEFAULT_GROUP}
+                """.formatted(config.effectiveArtifactId(), config.nacosAddr(), config.nacosNamespace());
     }
 
     public String generateDevConfig() {

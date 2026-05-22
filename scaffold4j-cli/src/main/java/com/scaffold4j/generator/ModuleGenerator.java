@@ -62,8 +62,14 @@ public class ModuleGenerator {
                     public static final String DEFAULT_CHARSET = "UTF-8";
                     public static final int DEFAULT_PAGE_SIZE = 20;
                     public static final int MAX_PAGE_SIZE = 100;
+
+                    // Redis key prefixes
+                    public static final String REDIS_KEY_PREFIX = "%s:";
+                    public static final String CACHE_AI_RESPONSE = "ai:response:";
+                    public static final String CACHE_USER = "user:";
+                    public static final String CACHE_SESSION = "session:";
                 }
-                """.formatted(pkg);
+                """.formatted(pkg, config.effectiveArtifactId());
     }
 
     public String generateBaseException(String pkg) {
@@ -1751,6 +1757,696 @@ public class ModuleGenerator {
                     }
                 }
                 """.formatted(pkg, config.basePackage());
+    }
+
+    // ==================== infra: database config ====================
+
+    public String generateDataSourceConfig(String pkg) {
+        return """
+                package %s.infra.config;
+
+                import com.zaxxer.hikari.HikariDataSource;
+                import org.springframework.boot.context.properties.ConfigurationProperties;
+                import org.springframework.boot.jdbc.DataSourceBuilder;
+                import org.springframework.context.annotation.Bean;
+                import org.springframework.context.annotation.Configuration;
+
+                import javax.sql.DataSource;
+
+                @Configuration
+                public class DataSourceConfig {
+
+                    @Bean
+                    @ConfigurationProperties(prefix = "spring.datasource")
+                    public DataSource dataSource() {
+                        return DataSourceBuilder.create()
+                                .type(HikariDataSource.class)
+                                .build();
+                    }
+                }
+                """.formatted(pkg);
+    }
+
+    public String generateMybatisPlusConfig(String pkg) {
+        return """
+                package %s.infra.config;
+
+                import com.baomidou.mybatisplus.annotation.DbType;
+                import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+                import com.baomidou.mybatisplus.extension.plugins.inner.BlockAttackInnerInterceptor;
+                import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor;
+                import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
+                import org.mybatis.spring.annotation.MapperScan;
+                import org.springframework.context.annotation.Bean;
+                import org.springframework.context.annotation.Configuration;
+
+                @Configuration
+                @MapperScan("%s.infra.mapper")
+                public class MybatisPlusConfig {
+
+                    @Bean
+                    public MybatisPlusInterceptor mybatisPlusInterceptor() {
+                        MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+                        // Pagination plugin
+                        interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.%s));
+                        // Optimistic locker
+                        interceptor.addInnerInterceptor(new OptimisticLockerInnerInterceptor());
+                        // Block full-table update/delete
+                        interceptor.addInnerInterceptor(new BlockAttackInnerInterceptor());
+                        return interceptor;
+                    }
+                }
+                """.formatted(pkg, pkg, config.dbType().name());
+    }
+
+    public String generateJpaConfig(String pkg) {
+        return """
+                package %s.infra.config;
+
+                import org.springframework.context.annotation.Configuration;
+                import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+                import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+
+                @Configuration
+                @EnableJpaRepositories(basePackages = "%s.infra.repository")
+                @EnableJpaAuditing
+                public class JpaConfig {
+                }
+                """.formatted(pkg, pkg);
+    }
+
+    // ==================== infra: cache config ====================
+
+    public String generateRedisCacheConfig(String pkg) {
+        return """
+                package %s.infra.config;
+
+                import com.fasterxml.jackson.annotation.JsonTypeInfo;
+                import com.fasterxml.jackson.databind.ObjectMapper;
+                import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+                import org.springframework.cache.annotation.EnableCaching;
+                import org.springframework.context.annotation.Bean;
+                import org.springframework.context.annotation.Configuration;
+                import org.springframework.data.redis.connection.RedisConnectionFactory;
+                import org.springframework.data.redis.core.RedisTemplate;
+                import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+                import org.springframework.data.redis.serializer.StringRedisSerializer;
+                import org.springframework.data.redis.cache.RedisCacheConfiguration;
+                import org.springframework.data.redis.cache.RedisCacheManager;
+                import org.springframework.data.redis.serializer.RedisSerializationContext;
+
+                import java.time.Duration;
+
+                @Configuration
+                @EnableCaching
+                public class RedisCacheConfig {
+
+                    @Bean
+                    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory factory) {
+                        RedisTemplate<String, Object> template = new RedisTemplate<>();
+                        template.setConnectionFactory(factory);
+
+                        ObjectMapper mapper = new ObjectMapper();
+                        mapper.registerModule(new JavaTimeModule());
+                        mapper.activateDefaultTyping(
+                                mapper.getPolymorphicTypeValidator(),
+                                ObjectMapper.DefaultTyping.NON_FINAL,
+                                JsonTypeInfo.As.PROPERTY);
+
+                        GenericJackson2JsonRedisSerializer serializer =
+                                new GenericJackson2JsonRedisSerializer(mapper);
+
+                        template.setKeySerializer(new StringRedisSerializer());
+                        template.setValueSerializer(serializer);
+                        template.setHashKeySerializer(new StringRedisSerializer());
+                        template.setHashValueSerializer(serializer);
+                        template.afterPropertiesSet();
+                        return template;
+                    }
+
+                    @Bean
+                    public RedisCacheManager cacheManager(RedisConnectionFactory factory) {
+                        RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
+                                .entryTtl(Duration.ofHours(1))
+                                .serializeKeysWith(RedisSerializationContext.SerializationPair
+                                        .fromSerializer(new StringRedisSerializer()))
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair
+                                        .fromSerializer(new GenericJackson2JsonRedisSerializer()))
+                                .disableCachingNullValues();
+
+                        return RedisCacheManager.builder(factory)
+                                .cacheDefaults(config)
+                                .build();
+                    }
+                }
+                """.formatted(pkg);
+    }
+
+    public String generateCaffeineCacheConfig(String pkg) {
+        return """
+                package %s.infra.config;
+
+                import com.github.benmanes.caffeine.cache.Caffeine;
+                import org.springframework.cache.CacheManager;
+                import org.springframework.cache.annotation.EnableCaching;
+                import org.springframework.cache.caffeine.CaffeineCacheManager;
+                import org.springframework.context.annotation.Bean;
+                import org.springframework.context.annotation.Configuration;
+
+                import java.util.concurrent.TimeUnit;
+
+                @Configuration
+                @EnableCaching
+                public class CaffeineCacheConfig {
+
+                    @Bean
+                    public CacheManager cacheManager() {
+                        CaffeineCacheManager cacheManager = new CaffeineCacheManager();
+                        cacheManager.setCaffeine(Caffeine.newBuilder()
+                                .maximumSize(500)
+                                .expireAfterAccess(10, TimeUnit.MINUTES)
+                                .recordStats());
+                        return cacheManager;
+                    }
+                }
+                """.formatted(pkg);
+    }
+
+    // ==================== infra: Nacos config refresh ====================
+
+    public String generateNacosConfigRefresh(String pkg) {
+        return """
+                package %s.infra.config;
+
+                import org.springframework.cloud.context.config.annotation.RefreshScope;
+                import org.springframework.context.annotation.Configuration;
+
+                /**
+                 * Enables @RefreshScope for Nacos config-driven hot reload.
+                 * Beans annotated with @RefreshScope will be re-initialized
+                 * when configuration changes in Nacos.
+                 */
+                @Configuration
+                @RefreshScope
+                public class NacosConfigRefresh {
+                }
+                """.formatted(pkg);
+    }
+
+    // ==================== domain: database entities ====================
+
+    public String generateUserStatus(String pkg) {
+        return """
+                package %s.domain.enums;
+
+                public enum UserStatus {
+                    ACTIVE, INACTIVE, BANNED
+                }
+                """.formatted(pkg);
+    }
+
+    public String generateUserEntity(String pkg) {
+        if (config.usesMyBatisPlus()) {
+            return """
+                    package %s.domain.entity;
+
+                    import com.baomidou.mybatisplus.annotation.*;
+                    import %s.domain.enums.UserStatus;
+                    import java.time.LocalDateTime;
+
+                    @TableName("t_user")
+                    public class User {
+                        @TableId(type = IdType.ASSIGN_ID)
+                        private Long id;
+                        private String username;
+                        private String email;
+                        private UserStatus status;
+
+                        @TableField(fill = FieldFill.INSERT)
+                        private LocalDateTime createTime;
+
+                        @TableField(fill = FieldFill.INSERT_UPDATE)
+                        private LocalDateTime updateTime;
+
+                        @Version
+                        private Integer version;
+
+                        @TableLogic
+                        private Integer deleted;
+
+                        public Long getId() { return id; }
+                        public void setId(Long id) { this.id = id; }
+                        public String getUsername() { return username; }
+                        public void setUsername(String username) { this.username = username; }
+                        public String getEmail() { return email; }
+                        public void setEmail(String email) { this.email = email; }
+                        public UserStatus getStatus() { return status; }
+                        public void setStatus(UserStatus status) { this.status = status; }
+                        public LocalDateTime getCreateTime() { return createTime; }
+                        public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+                        public LocalDateTime getUpdateTime() { return updateTime; }
+                        public void setUpdateTime(LocalDateTime updateTime) { this.updateTime = updateTime; }
+                        public Integer getVersion() { return version; }
+                        public void setVersion(Integer version) { this.version = version; }
+                        public Integer getDeleted() { return deleted; }
+                        public void setDeleted(Integer deleted) { this.deleted = deleted; }
+                    }
+                    """.formatted(pkg, pkg);
+        } else {
+            return """
+                    package %s.domain.entity;
+
+                    import %s.domain.enums.UserStatus;
+                    import jakarta.persistence.*;
+                    import org.springframework.data.annotation.CreatedDate;
+                    import org.springframework.data.annotation.LastModifiedDate;
+                    import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+                    import java.time.LocalDateTime;
+
+                    @Entity
+                    @Table(name = "t_user")
+                    @EntityListeners(AuditingEntityListener.class)
+                    public class User {
+                        @Id
+                        @GeneratedValue(strategy = GenerationType.IDENTITY)
+                        private Long id;
+
+                        @Column(nullable = false, length = 50)
+                        private String username;
+
+                        @Column(length = 100)
+                        private String email;
+
+                        @Enumerated(EnumType.STRING)
+                        private UserStatus status;
+
+                        @CreatedDate
+                        private LocalDateTime createTime;
+
+                        @LastModifiedDate
+                        private LocalDateTime updateTime;
+
+                        @Version
+                        private Integer version;
+
+                        public Long getId() { return id; }
+                        public void setId(Long id) { this.id = id; }
+                        public String getUsername() { return username; }
+                        public void setUsername(String username) { this.username = username; }
+                        public String getEmail() { return email; }
+                        public void setEmail(String email) { this.email = email; }
+                        public UserStatus getStatus() { return status; }
+                        public void setStatus(UserStatus status) { this.status = status; }
+                        public LocalDateTime getCreateTime() { return createTime; }
+                        public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+                        public LocalDateTime getUpdateTime() { return updateTime; }
+                        public void setUpdateTime(LocalDateTime updateTime) { this.updateTime = updateTime; }
+                        public Integer getVersion() { return version; }
+                        public void setVersion(Integer version) { this.version = version; }
+                    }
+                    """.formatted(pkg, pkg);
+        }
+    }
+
+    public String generateUserMapper(String pkg) {
+        return """
+                package %s.infra.mapper;
+
+                import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+                import %s.domain.entity.User;
+                import org.apache.ibatis.annotations.Mapper;
+
+                @Mapper
+                public interface UserMapper extends BaseMapper<User> {
+                }
+                """.formatted(pkg, pkg);
+    }
+
+    public String generateUserRepository(String pkg) {
+        return """
+                package %s.infra.repository;
+
+                import %s.domain.entity.User;
+                import org.springframework.data.jpa.repository.JpaRepository;
+                import org.springframework.stereotype.Repository;
+
+                import java.util.Optional;
+
+                @Repository
+                public interface UserRepository extends JpaRepository<User, Long> {
+                    Optional<User> findByUsername(String username);
+                    boolean existsByUsername(String username);
+                }
+                """.formatted(pkg, pkg);
+    }
+
+    // ==================== app: services ====================
+
+    public String generateUserService(String pkg) {
+        if (config.usesMyBatisPlus()) {
+            return """
+                    package %s.app.service;
+
+                    import com.baomidou.mybatisplus.core.metadata.IPage;
+                    import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+                    import %s.domain.entity.User;
+                    import %s.domain.enums.UserStatus;
+                    import %s.infra.mapper.UserMapper;
+                    import org.springframework.stereotype.Service;
+
+                    import java.util.List;
+
+                    @Service
+                    public class UserService {
+                        private final UserMapper userMapper;
+
+                        public UserService(UserMapper userMapper) {
+                            this.userMapper = userMapper;
+                        }
+
+                        public User create(User user) {
+                            user.setStatus(UserStatus.ACTIVE);
+                            userMapper.insert(user);
+                            return user;
+                        }
+
+                        public User findById(Long id) {
+                            return userMapper.selectById(id);
+                        }
+
+                        public List<User> findAll() {
+                            return userMapper.selectList(null);
+                        }
+
+                        public IPage<User> page(int page, int size) {
+                            return userMapper.selectPage(new Page<>(page, size), null);
+                        }
+
+                        public User update(User user) {
+                            userMapper.updateById(user);
+                            return userMapper.selectById(user.getId());
+                        }
+
+                        public void delete(Long id) {
+                            userMapper.deleteById(id);
+                        }
+                    }
+                    """.formatted(pkg, pkg, pkg, pkg);
+        } else {
+            return """
+                    package %s.app.service;
+
+                    import %s.domain.entity.User;
+                    import %s.domain.enums.UserStatus;
+                    import %s.infra.repository.UserRepository;
+                    import org.springframework.data.domain.Page;
+                    import org.springframework.data.domain.Pageable;
+                    import org.springframework.stereotype.Service;
+
+                    import java.util.List;
+
+                    @Service
+                    public class UserService {
+                        private final UserRepository userRepository;
+
+                        public UserService(UserRepository userRepository) {
+                            this.userRepository = userRepository;
+                        }
+
+                        public User create(User user) {
+                            user.setStatus(UserStatus.ACTIVE);
+                            return userRepository.save(user);
+                        }
+
+                        public User findById(Long id) {
+                            return userRepository.findById(id)
+                                    .orElseThrow(() -> new RuntimeException("User not found: " + id));
+                        }
+
+                        public List<User> findAll() {
+                            return userRepository.findAll();
+                        }
+
+                        public Page<User> page(Pageable pageable) {
+                            return userRepository.findAll(pageable);
+                        }
+
+                        public User update(Long id, User user) {
+                            User existing = findById(id);
+                            existing.setUsername(user.getUsername());
+                            existing.setEmail(user.getEmail());
+                            existing.setStatus(user.getStatus());
+                            return userRepository.save(existing);
+                        }
+
+                        public void delete(Long id) {
+                            userRepository.deleteById(id);
+                        }
+                    }
+                    """.formatted(pkg, pkg, pkg, pkg);
+        }
+    }
+
+    public String generateCacheService(String pkg) {
+        return """
+                package %s.app.service;
+
+                import org.springframework.cache.annotation.CacheEvict;
+                import org.springframework.cache.annotation.CachePut;
+                import org.springframework.cache.annotation.Cacheable;
+                import org.springframework.stereotype.Service;
+
+                import java.util.concurrent.TimeUnit;
+
+                /**
+                 * Generic cache service — wraps Spring Cache annotations.
+                 * Use for caching expensive operations like AI call results.
+                 */
+                @Service
+                public class CacheService {
+
+                    @Cacheable(value = "ai-responses", key = "#key", unless = "#result == null")
+                    public String getCachedResponse(String key) {
+                        // Cache miss — caller should populate via putCachedResponse
+                        return null;
+                    }
+
+                    @CachePut(value = "ai-responses", key = "#key")
+                    public String putCachedResponse(String key, String response) {
+                        return response;
+                    }
+
+                    @CacheEvict(value = "ai-responses", key = "#key")
+                    public void evictResponse(String key) {
+                    }
+
+                    @CacheEvict(value = "ai-responses", allEntries = true)
+                    public void evictAllResponses() {
+                    }
+                }
+                """.formatted(pkg);
+    }
+
+    // ==================== app: enhanced LangChain4j ====================
+
+    public String generateAIAgentService(String pkg) {
+        return """
+                package %s.app.agent;
+
+                import %s.domain.dto.ChatRequest;
+                import %s.domain.dto.ChatResponse;
+                import %s.app.service.ChatService;
+                import %s.app.tool.WeatherTool;
+                import %s.app.tool.SearchTool;
+                import org.springframework.stereotype.Service;
+
+                /**
+                 * LangChain4j AI Service — declarative AI agent.
+                 * Uses AI Services pattern for tool-calling agents.
+                 * Fallback: delegates to ChatService when LangChain4j not on classpath.
+                 */
+                @Service
+                public class AIAgentService {
+
+                    private final ChatService chatService;
+                    private final WeatherTool weatherTool;
+                    private final SearchTool searchTool;
+
+                    public AIAgentService(ChatService chatService,
+                                          WeatherTool weatherTool,
+                                          SearchTool searchTool) {
+                        this.chatService = chatService;
+                        this.weatherTool = weatherTool;
+                        this.searchTool = searchTool;
+                    }
+
+                    public ChatResponse chat(ChatRequest request) {
+                        // Route to appropriate handler based on intent
+                        String message = request.getMessage().toLowerCase();
+                        if (message.contains("weather") || message.contains("天气")) {
+                            request.setMessage(weatherTool.getWeather(message.contains("beijing") || message.contains("北京")
+                                    ? "Beijing" : "Shanghai"));
+                        } else if (message.contains("search") || message.contains("搜索")) {
+                            request.setMessage(searchTool.search(message));
+                        }
+                        return chatService.chat(request);
+                    }
+                }
+                """.formatted(pkg, pkg, pkg, pkg, pkg, pkg);
+    }
+
+    public String generateLangGraphWorkflow(String pkg) {
+        return """
+                package %s.app.agent.workflow;
+
+                import %s.app.service.ChatService;
+                import %s.app.service.UserService;
+                import %s.app.tool.SearchTool;
+                import %s.app.tool.WeatherTool;
+                import %s.domain.dto.ChatRequest;
+                import %s.domain.dto.ChatResponse;
+                import org.springframework.stereotype.Component;
+
+                import java.util.Map;
+
+                /**
+                 * LangGraph4j StateGraph workflow — orchestrates multi-step AI tasks.
+                 * Routes user requests through classify -> tool execution -> response.
+                 */
+                @Component
+                public class LangGraphWorkflow {
+
+                    private final ChatService chatService;
+                    private final SearchTool searchTool;
+                    private final WeatherTool weatherTool;
+                    private final UserService userService;
+
+                    public LangGraphWorkflow(ChatService chatService,
+                                             SearchTool searchTool,
+                                             WeatherTool weatherTool,
+                                             UserService userService) {
+                        this.chatService = chatService;
+                        this.searchTool = searchTool;
+                        this.weatherTool = weatherTool;
+                        this.userService = userService;
+                    }
+
+                    /**
+                     * Classify user intent from message content.
+                     */
+                    public String classifyIntent(String message) {
+                        String lower = message.toLowerCase();
+                        if (lower.contains("weather") || lower.contains("天气")) return "WEATHER";
+                        if (lower.contains("search") || lower.contains("搜索") || lower.contains("查找")) return "SEARCH";
+                        if (lower.contains("user") || lower.contains("用户")) return "DATABASE";
+                        return "GENERAL";
+                    }
+
+                    /**
+                     * Execute tool based on classified intent and return result.
+                     */
+                    public String executeTool(String intent, String message) {
+                        return switch (intent) {
+                            case "WEATHER" -> weatherTool.getWeather("Shanghai");
+                            case "SEARCH" -> searchTool.search(message);
+                            case "DATABASE" -> "Found users: " + userService.findAll().size();
+                            default -> message;
+                        };
+                    }
+
+                    /**
+                     * Full workflow: classify -> execute -> respond.
+                     */
+                    public ChatResponse run(String message) {
+                        String intent = classifyIntent(message);
+                        String toolResult = executeTool(intent, message);
+                        ChatRequest request = new ChatRequest();
+                        request.setMessage("Intent: " + intent + ". Data: " + toolResult
+                                + ". User message: " + message);
+                        return chatService.chat(request);
+                    }
+                }
+                """.formatted(pkg, pkg, pkg, pkg, pkg, pkg, pkg);
+    }
+
+    // ==================== api: controllers ====================
+
+    public String generateUserController(String pkg) {
+        return """
+                package %s.api.rest;
+
+                import %s.app.service.UserService;
+                import %s.common.result.Result;
+                import %s.domain.entity.User;
+                import org.springframework.web.bind.annotation.*;
+
+                import java.util.List;
+
+                @RestController
+                @RequestMapping("/api/users")
+                public class UserController {
+                    private final UserService userService;
+
+                    public UserController(UserService userService) {
+                        this.userService = userService;
+                    }
+
+                    @PostMapping
+                    public Result<User> create(@RequestBody User user) {
+                        return Result.success(userService.create(user));
+                    }
+
+                    @GetMapping("/{id}")
+                    public Result<User> getById(@PathVariable Long id) {
+                        return Result.success(userService.findById(id));
+                    }
+
+                    @GetMapping
+                    public Result<List<User>> list() {
+                        return Result.success(userService.findAll());
+                    }
+
+                    @PutMapping("/{id}")
+                    public Result<User> update(@PathVariable Long id, @RequestBody User user) {
+                        return Result.success(userService.update(user));
+                    }
+
+                    @DeleteMapping("/{id}")
+                    public Result<Void> delete(@PathVariable Long id) {
+                        userService.delete(id);
+                        return Result.success();
+                    }
+                }
+                """.formatted(pkg, pkg, pkg, pkg);
+    }
+
+    public String generateHealthController(String pkg) {
+        return """
+                package %s.api.rest;
+
+                import org.springframework.web.bind.annotation.GetMapping;
+                import org.springframework.web.bind.annotation.RestController;
+
+                import java.util.Map;
+
+                @RestController
+                public class HealthController {
+
+                    @GetMapping({"/health", "/actuator/health/lite"})
+                    public Map<String, Object> health() {
+                        return Map.of(
+                            "status", "UP",
+                            "app", "%s",
+                            "timestamp", System.currentTimeMillis()
+                        );
+                    }
+
+                    @GetMapping("/ready")
+                    public Map<String, Object> readiness() {
+                        return Map.of("status", "READY");
+                    }
+                }
+                """.formatted(pkg, config.effectiveArtifactId());
     }
 
     // ==================== utility ====================

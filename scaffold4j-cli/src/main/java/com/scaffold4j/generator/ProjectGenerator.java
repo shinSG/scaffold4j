@@ -121,6 +121,14 @@ public class ProjectGenerator {
                 moduleGenerator.generateMessageRole(pkg));
         FileUtils.writeFile(src.resolve("enums/LLMProviderType.java"),
                 moduleGenerator.generateLLMProviderType(pkg));
+
+        // Database entities
+        if (config.hasDatabase()) {
+            FileUtils.writeFile(src.resolve("enums/UserStatus.java"),
+                    moduleGenerator.generateUserStatus(pkg));
+            FileUtils.writeFile(src.resolve("entity/User.java"),
+                    moduleGenerator.generateUserEntity(pkg));
+        }
     }
 
     private void generateInfraModule() throws IOException {
@@ -172,9 +180,41 @@ public class ProjectGenerator {
                     moduleGenerator.generateWebSocketConfig(pkg));
         }
 
-        if (config.nacosEnabled()) {
+        if (config.hasNacosDiscovery()) {
             FileUtils.writeFile(src.resolve("config/NacosDiscoveryConfig.java"),
                     moduleGenerator.generateNacosDiscoveryConfig(pkg));
+        }
+        if (config.hasNacosConfig()) {
+            FileUtils.writeFile(src.resolve("config/NacosConfigRefresh.java"),
+                    moduleGenerator.generateNacosConfigRefresh(pkg));
+        }
+
+        // Database infrastructure
+        if (config.hasDatabase()) {
+            FileUtils.writeFile(src.resolve("config/DataSourceConfig.java"),
+                    moduleGenerator.generateDataSourceConfig(pkg));
+            if (config.usesMyBatisPlus()) {
+                FileUtils.writeFile(src.resolve("config/MybatisPlusConfig.java"),
+                        moduleGenerator.generateMybatisPlusConfig(pkg));
+                FileUtils.writeFile(src.resolve("mapper/UserMapper.java"),
+                        moduleGenerator.generateUserMapper(pkg));
+            }
+            if (config.usesJpa()) {
+                FileUtils.writeFile(src.resolve("config/JpaConfig.java"),
+                        moduleGenerator.generateJpaConfig(pkg));
+                FileUtils.writeFile(src.resolve("repository/UserRepository.java"),
+                        moduleGenerator.generateUserRepository(pkg));
+            }
+        }
+
+        // Cache infrastructure
+        if (config.hasRedisCache()) {
+            FileUtils.writeFile(src.resolve("config/RedisCacheConfig.java"),
+                    moduleGenerator.generateRedisCacheConfig(pkg));
+        }
+        if (config.hasCaffeineCache()) {
+            FileUtils.writeFile(src.resolve("config/CaffeineCacheConfig.java"),
+                    moduleGenerator.generateCaffeineCacheConfig(pkg));
         }
     }
 
@@ -231,6 +271,22 @@ public class ProjectGenerator {
                     moduleGenerator.generateChatWorkflow(pkg));
             FileUtils.writeFile(src.resolve("agent/workflow/StateGraphConfig.java"),
                     moduleGenerator.generateStateGraphConfig(pkg));
+            FileUtils.writeFile(src.resolve("agent/AIAgentService.java"),
+                    moduleGenerator.generateAIAgentService(pkg));
+            FileUtils.writeFile(src.resolve("agent/workflow/LangGraphWorkflow.java"),
+                    moduleGenerator.generateLangGraphWorkflow(pkg));
+        }
+
+        // Database services
+        if (config.hasDatabase()) {
+            FileUtils.writeFile(src.resolve("service/UserService.java"),
+                    moduleGenerator.generateUserService(pkg));
+        }
+
+        // Cache services
+        if (config.hasCache()) {
+            FileUtils.writeFile(src.resolve("service/CacheService.java"),
+                    moduleGenerator.generateCacheService(pkg));
         }
 
         FileUtils.writeFile(src.resolve("agent/AgentOrchestrator.java"),
@@ -289,6 +345,16 @@ public class ProjectGenerator {
             FileUtils.writeFile(src.resolve("ws/ChatWebSocketHandler.java"),
                     moduleGenerator.generateChatWebSocketHandler(pkg));
         }
+
+        // Database REST API
+        if (config.hasDatabase()) {
+            FileUtils.writeFile(src.resolve("rest/UserController.java"),
+                    moduleGenerator.generateUserController(pkg));
+        }
+
+        // Health check endpoint (always generate)
+        FileUtils.writeFile(src.resolve("rest/HealthController.java"),
+                moduleGenerator.generateHealthController(pkg));
     }
 
     private void generateBootstrapModule() throws IOException {
@@ -310,6 +376,10 @@ public class ProjectGenerator {
         FileUtils.writeFile(res.resolve("application-dev.yml"), configGenerator.generateDevConfig());
         FileUtils.writeFile(res.resolve("application-prod.yml"), configGenerator.generateProdConfig());
         FileUtils.writeFile(res.resolve("logback-spring.xml"), configGenerator.generateLogbackConfig());
+
+        if (config.hasNacosConfig()) {
+            FileUtils.writeFile(res.resolve("bootstrap.yml"), configGenerator.generateBootstrapConfig());
+        }
     }
 
     private void generateDockerFiles() throws IOException {

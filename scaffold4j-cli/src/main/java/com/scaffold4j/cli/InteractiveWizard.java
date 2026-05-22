@@ -42,7 +42,7 @@ public final class InteractiveWizard {
 
         // 3. AI framework
         System.out.println();
-        System.out.println("AI Framework options: spring-ai, langchain4j, both");
+        System.out.println("AI Framework options: spring-ai, spring-ai-alibaba, langchain4j, both");
         cmd.aiFramework(prompt(console, "AI framework", cmd.aiFramework()));
 
         // 4. LLM providers
@@ -73,7 +73,36 @@ public final class InteractiveWizard {
             cmd.nacosNamespace(prompt(console, "Nacos namespace", cmd.nacosNamespace()));
         }
 
-        // 9. Output
+        // 9. Database
+        System.out.println();
+        System.out.println("Database types: mysql, postgresql, h2 (embedded)");
+        cmd.dbType(prompt(console, "Database type", cmd.dbType() != null ? cmd.dbType() : "h2"));
+        if (cmd.dbType() != null && !"h2".equalsIgnoreCase(cmd.dbType())) {
+            cmd.dbHost(prompt(console, "Database host", cmd.dbHost() != null ? cmd.dbHost() : "localhost"));
+            String dbPortStr = prompt(console, "Database port", cmd.dbPort() != null ? String.valueOf(cmd.dbPort()) : "");
+            cmd.dbPort(dbPortStr.isEmpty() ? null : Integer.parseInt(dbPortStr));
+            cmd.dbName(prompt(console, "Database name", cmd.dbName()));
+            cmd.dbUsername(prompt(console, "Database username", cmd.dbUsername()));
+            cmd.dbPassword(prompt(console, "Database password", cmd.dbPassword()));
+        }
+        System.out.println();
+        System.out.println("ORM frameworks: mybatis-plus, jpa");
+        cmd.orm(prompt(console, "ORM framework", cmd.orm() != null ? cmd.orm() : "mybatis-plus"));
+
+        // 10. Cache
+        System.out.println();
+        System.out.println("Cache types: redis, caffeine, none");
+        cmd.cacheType(prompt(console, "Cache type", cmd.cacheType() != null ? cmd.cacheType() : "none"));
+        if ("redis".equalsIgnoreCase(cmd.cacheType())) {
+            cmd.redisHost(prompt(console, "Redis host", cmd.redisHost() != null ? cmd.redisHost() : "localhost"));
+            String redisPortStr = prompt(console, "Redis port", cmd.redisPort() != null ? String.valueOf(cmd.redisPort()) : "6379");
+            cmd.redisPort(Integer.parseInt(redisPortStr));
+            cmd.redisPassword(prompt(console, "Redis password", cmd.redisPassword()));
+            String redisDbStr = prompt(console, "Redis database", cmd.redisDatabase() != null ? String.valueOf(cmd.redisDatabase()) : "0");
+            cmd.redisDatabase(Integer.parseInt(redisDbStr));
+        }
+
+        // 11. Output
         cmd.outputDir(prompt(console, "Output directory", cmd.outputDir()));
 
         System.out.println();

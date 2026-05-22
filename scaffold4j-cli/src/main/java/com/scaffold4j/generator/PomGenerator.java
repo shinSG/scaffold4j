@@ -65,8 +65,22 @@ public class PomGenerator {
                     """);
         }
 
-        // Nacos BOM
-        if (config.nacosEnabled()) {
+        // Spring AI Alibaba BOM
+        if (config.usesSpringAIAlibaba()) {
+            deps.append("""
+                    <!-- Spring AI Alibaba BOM -->
+                            <dependency>
+                                <groupId>com.alibaba.cloud.ai</groupId>
+                                <artifactId>spring-ai-alibaba-bom</artifactId>
+                                <version>${spring-ai.version}</version>
+                                <type>pom</type>
+                                <scope>import</scope>
+                            </dependency>
+                    """);
+        }
+
+        // Nacos BOM (via Spring Cloud Alibaba)
+        if (config.hasNacos()) {
             deps.append("""
                     <!-- Spring Cloud Alibaba BOM -->
                             <dependency>
@@ -80,7 +94,7 @@ public class PomGenerator {
         }
 
         // Spring Cloud BOM (needed for Nacos)
-        if (config.nacosEnabled()) {
+        if (config.hasNacos()) {
             deps.append("""
                     <!-- Spring Cloud BOM -->
                             <dependency>
@@ -89,6 +103,30 @@ public class PomGenerator {
                                 <version>${spring-cloud.version}</version>
                                 <type>pom</type>
                                 <scope>import</scope>
+                            </dependency>
+                    """);
+        }
+
+        // Database driver version management
+        if (config.hasDatabase()) {
+            deps.append("""
+                    <!-- MyBatis-Plus -->
+                            <dependency>
+                                <groupId>com.baomidou</groupId>
+                                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                                <version>${mybatis-plus.version}</version>
+                            </dependency>
+                            <!-- MySQL Driver -->
+                            <dependency>
+                                <groupId>com.mysql</groupId>
+                                <artifactId>mysql-connector-j</artifactId>
+                                <version>${mysql-connector.version}</version>
+                            </dependency>
+                            <!-- PostgreSQL Driver -->
+                            <dependency>
+                                <groupId>org.postgresql</groupId>
+                                <artifactId>postgresql</artifactId>
+                                <version>${postgresql.version}</version>
                             </dependency>
                     """);
         }
@@ -169,9 +207,19 @@ public class PomGenerator {
         StringBuilder sb = new StringBuilder();
         sb.append("        <spring-ai.version>1.0.1</spring-ai.version>\n");
         sb.append("        <langchain4j.version>1.0.0-beta1</langchain4j.version>\n");
-        if (config.nacosEnabled()) {
+        sb.append("        <langgraph4j.version>1.2.3</langgraph4j.version>\n");
+        if (config.hasNacos()) {
             sb.append("        <spring-cloud.version>").append(config.springCloudVersion()).append("</spring-cloud.version>\n");
             sb.append("        <spring-cloud-alibaba.version>2025.0.0.0</spring-cloud-alibaba.version>\n");
+        }
+        if (config.hasDatabase()) {
+            sb.append("        <mybatis-plus.version>3.5.9</mybatis-plus.version>\n");
+            sb.append("        <mysql-connector.version>9.1.0</mysql-connector.version>\n");
+            sb.append("        <postgresql.version>42.7.4</postgresql.version>\n");
+            sb.append("        <h2.version>2.3.232</h2.version>\n");
+        }
+        if (config.hasCache()) {
+            sb.append("        <caffeine.version>3.1.8</caffeine.version>\n");
         }
         return sb.toString();
     }
@@ -273,13 +321,135 @@ public class PomGenerator {
                             """);
                 }
 
-                // Nacos
-                if (config.nacosEnabled()) {
+                // Nacos Discovery
+                if (config.hasNacosDiscovery()) {
                     dependencies.append("""
                             <!-- Nacos Discovery -->
                             <dependency>
                                 <groupId>com.alibaba.cloud</groupId>
                                 <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+                            </dependency>
+                            """);
+                }
+
+                // Nacos Config
+                if (config.hasNacosConfig()) {
+                    dependencies.append("""
+                            <!-- Nacos Config -->
+                            <dependency>
+                                <groupId>com.alibaba.cloud</groupId>
+                                <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+                            </dependency>
+                            """);
+                }
+
+                // Spring AI Alibaba
+                if (config.usesSpringAIAlibaba()) {
+                    dependencies.append("""
+                            <!-- Spring AI Alibaba (DashScope) -->
+                            <dependency>
+                                <groupId>com.alibaba.cloud.ai</groupId>
+                                <artifactId>spring-ai-alibaba-starter</artifactId>
+                            </dependency>
+                            """);
+                }
+
+                // LangChain4j Spring Boot Starter
+                if (config.usesLangChain4j()) {
+                    dependencies.append("""
+                            <!-- LangChain4j Spring Boot Starter -->
+                            <dependency>
+                                <groupId>dev.langchain4j</groupId>
+                                <artifactId>langchain4j-spring-boot-starter</artifactId>
+                            </dependency>
+                            """);
+                }
+
+                // Database driver
+                if (config.hasDatabase()) {
+                    switch (config.dbType()) {
+                        case MYSQL:
+                            dependencies.append("""
+                                    <!-- MySQL Driver -->
+                                    <dependency>
+                                        <groupId>com.mysql</groupId>
+                                        <artifactId>mysql-connector-j</artifactId>
+                                        <scope>runtime</scope>
+                                    </dependency>
+                                    """);
+                            break;
+                        case POSTGRESQL:
+                            dependencies.append("""
+                                    <!-- PostgreSQL Driver -->
+                                    <dependency>
+                                        <groupId>org.postgresql</groupId>
+                                        <artifactId>postgresql</artifactId>
+                                        <scope>runtime</scope>
+                                    </dependency>
+                                    """);
+                            break;
+                        case H2:
+                            dependencies.append("""
+                                    <!-- H2 Embedded Database -->
+                                    <dependency>
+                                        <groupId>com.h2database</groupId>
+                                        <artifactId>h2</artifactId>
+                                        <scope>runtime</scope>
+                                    </dependency>
+                                    """);
+                            break;
+                    }
+                }
+
+                // ORM framework
+                if (config.usesMyBatisPlus()) {
+                    dependencies.append("""
+                            <!-- MyBatis-Plus -->
+                            <dependency>
+                                <groupId>com.baomidou</groupId>
+                                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                            </dependency>
+                            """);
+                }
+                if (config.usesJpa()) {
+                    dependencies.append("""
+                            <!-- Spring Data JPA -->
+                            <dependency>
+                                <groupId>org.springframework.boot</groupId>
+                                <artifactId>spring-boot-starter-data-jpa</artifactId>
+                            </dependency>
+                            """);
+                }
+
+                // Redis Cache
+                if (config.hasRedisCache()) {
+                    dependencies.append("""
+                            <!-- Spring Data Redis -->
+                            <dependency>
+                                <groupId>org.springframework.boot</groupId>
+                                <artifactId>spring-boot-starter-data-redis</artifactId>
+                            </dependency>
+                            """);
+                }
+
+                // Caffeine Cache
+                if (config.hasCaffeineCache()) {
+                    dependencies.append("""
+                            <!-- Caffeine Cache -->
+                            <dependency>
+                                <groupId>com.github.ben-manes.caffeine</groupId>
+                                <artifactId>caffeine</artifactId>
+                            </dependency>
+                            """);
+                }
+
+                // Spring Cache abstraction
+                if (config.hasCache()) {
+                    dependencies.append("""
+                            <!-- Spring Cache -->
+                            <dependency>
+                                <groupId>org.springframework.boot</groupId>
+                                <artifactId>spring-boot-starter-cache</artifactId>
                             </dependency>
                             """);
                 }
@@ -374,12 +544,12 @@ public class PomGenerator {
                         </dependency>
                         """);
 
-                if (config.nacosEnabled()) {
+                if (config.hasNacosConfig()) {
                     dependencies.append("""
-                            <!-- Nacos Config -->
+                            <!-- Spring Cloud Bootstrap (required for Nacos Config) -->
                             <dependency>
-                                <groupId>com.alibaba.cloud</groupId>
-                                <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+                                <groupId>org.springframework.cloud</groupId>
+                                <artifactId>spring-cloud-starter-bootstrap</artifactId>
                             </dependency>
                             """);
                 }

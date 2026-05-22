@@ -2,8 +2,11 @@ package com.scaffold4j.cli;
 
 import com.scaffold4j.generator.ProjectGenerator;
 import com.scaffold4j.model.AIFramework;
+import com.scaffold4j.model.CacheType;
+import com.scaffold4j.model.DatabaseType;
 import com.scaffold4j.model.Feature;
 import com.scaffold4j.model.LLMProvider;
+import com.scaffold4j.model.OrmType;
 import com.scaffold4j.model.ProjectConfig;
 import com.scaffold4j.model.Protocol;
 import com.scaffold4j.model.VectorStore;
@@ -92,8 +95,16 @@ public class GenerateCommand implements Callable<Integer> {
     // ---- Nacos ----
 
     @Option(names = {"--nacos"},
-            description = "Enable Nacos service registration. Default: false")
+            description = "Enable Nacos service discovery + config center. Default: false")
     private boolean nacos = false;
+
+    @Option(names = {"--nacos-discovery"},
+            description = "Enable Nacos service registration only.")
+    private Boolean nacosDiscovery;
+
+    @Option(names = {"--nacos-config"},
+            description = "Enable Nacos config center only.")
+    private Boolean nacosConfig;
 
     @Option(names = {"--nacos-addr"},
             description = "Nacos server address. Default: localhost:8848")
@@ -102,6 +113,58 @@ public class GenerateCommand implements Callable<Integer> {
     @Option(names = {"--nacos-namespace"},
             description = "Nacos namespace.")
     private String nacosNamespace = "";
+
+    // ---- Database ----
+
+    @Option(names = {"--db-type"},
+            description = "Database type. Valid values: mysql, postgresql, h2. Default: h2 (embedded)")
+    private String dbType;
+
+    @Option(names = {"--db-host"},
+            description = "Database host. Default: localhost")
+    private String dbHost = "localhost";
+
+    @Option(names = {"--db-port"},
+            description = "Database port. Default depends on db-type (mysql=3306, postgresql=5432).")
+    private Integer dbPort;
+
+    @Option(names = {"--db-name"},
+            description = "Database name. Defaults to project name.")
+    private String dbName;
+
+    @Option(names = {"--db-username"},
+            description = "Database username. Default: root")
+    private String dbUsername = "root";
+
+    @Option(names = {"--db-password"},
+            description = "Database password. Default: root")
+    private String dbPassword = "root";
+
+    @Option(names = {"--orm"},
+            description = "ORM framework. Valid values: mybatis-plus, jpa. Default: mybatis-plus")
+    private String orm;
+
+    // ---- Cache ----
+
+    @Option(names = {"--cache-type"},
+            description = "Cache type. Valid values: redis, caffeine, none. Default: none")
+    private String cacheType;
+
+    @Option(names = {"--redis-host"},
+            description = "Redis host. Default: localhost")
+    private String redisHost = "localhost";
+
+    @Option(names = {"--redis-port"},
+            description = "Redis port. Default: 6379")
+    private Integer redisPort = 6379;
+
+    @Option(names = {"--redis-password"},
+            description = "Redis password.")
+    private String redisPassword;
+
+    @Option(names = {"--redis-database"},
+            description = "Redis database number. Default: 0")
+    private Integer redisDatabase = 0;
 
     // ---- Output ----
 
@@ -137,7 +200,12 @@ public class GenerateCommand implements Callable<Integer> {
         System.out.println("  Protocols:   " + config.protocols());
         System.out.println("  Providers:   " + config.llmProviders().stream().map(LLMProvider::id).toList());
         System.out.println("  Features:    " + (config.features().isEmpty() ? "(none)" : config.features()));
-        System.out.println("  Nacos:       " + (config.nacosEnabled() ? "enabled (" + config.nacosAddr() + ")" : "disabled"));
+        System.out.println("  Database:    " + config.dbType().displayName());
+        System.out.println("  ORM:         " + config.ormType().displayName());
+        System.out.println("  Cache:       " + config.cacheType().displayName());
+        System.out.println("  Nacos:       " + (config.hasNacos()
+                ? "discovery=" + config.hasNacosDiscovery() + " config=" + config.hasNacosConfig()
+                : "disabled"));
         System.out.println();
 
         new ProjectGenerator(config).generate();
@@ -158,6 +226,10 @@ public class GenerateCommand implements Callable<Integer> {
      * Converts parsed CLI arguments into a fully populated ProjectConfig.
      */
     ProjectConfig buildConfig() {
+        // Nacos: --nacos enables both, --nacos-discovery/--nacos-config override
+        boolean discovery = nacosDiscovery != null ? nacosDiscovery : nacos;
+        boolean config = nacosConfig != null ? nacosConfig : nacos;
+
         ProjectConfig cfg = new ProjectConfig()
                 .name(name)
                 .basePackage(basePackage)
@@ -168,7 +240,8 @@ public class GenerateCommand implements Callable<Integer> {
                 .springBootVersion(springBootVersion)
                 .aiFramework(AIFramework.fromId(aiFramework))
                 .vectorStore(VectorStore.fromId(vectorStore))
-                .nacosEnabled(nacos)
+                .nacosDiscoveryEnabled(discovery)
+                .nacosConfigEnabled(config)
                 .nacosAddr(nacosAddr)
                 .nacosNamespace(nacosNamespace)
                 .outputDir(outputDir);
@@ -177,6 +250,28 @@ public class GenerateCommand implements Callable<Integer> {
         cfg.protocols(parseSet(protocols, Protocol::fromId));
         cfg.llmProviders(parseSet(llmProviders, LLMProvider::fromId));
         cfg.features(parseSet(features, Feature::fromId));
+
+        // Database configuration
+        if (dbType != null && !dbType.isBlank()) {
+            cfg.dbType(DatabaseType.fromId(dbType));
+        }
+        cfg.dbHost(dbHost);
+        if (dbPort != null) cfg.dbPort(dbPort);
+        if (dbName != null && !dbName.isBlank()) cfg.dbName(dbName);
+        cfg.dbUsername(dbUsername);
+        cfg.dbPassword(dbPassword);
+        if (orm != null && !orm.isBlank()) {
+            cfg.ormType(OrmType.fromId(orm));
+        }
+
+        // Cache configuration
+        if (cacheType != null && !cacheType.isBlank()) {
+            cfg.cacheType(CacheType.fromId(cacheType));
+        }
+        cfg.redisHost(redisHost);
+        if (redisPort != null) cfg.redisPort(redisPort);
+        if (redisPassword != null && !redisPassword.isBlank()) cfg.redisPassword(redisPassword);
+        if (redisDatabase != null) cfg.redisDatabase(redisDatabase);
 
         return cfg;
     }
@@ -217,6 +312,18 @@ public class GenerateCommand implements Callable<Integer> {
     public void nacos(boolean v) { this.nacos = v; }
     public void nacosAddr(String v) { this.nacosAddr = v; }
     public void nacosNamespace(String v) { this.nacosNamespace = v; }
+    public void dbType(String v) { this.dbType = v; }
+    public void dbHost(String v) { this.dbHost = v; }
+    public void dbPort(Integer v) { this.dbPort = v; }
+    public void dbName(String v) { this.dbName = v; }
+    public void dbUsername(String v) { this.dbUsername = v; }
+    public void dbPassword(String v) { this.dbPassword = v; }
+    public void orm(String v) { this.orm = v; }
+    public void cacheType(String v) { this.cacheType = v; }
+    public void redisHost(String v) { this.redisHost = v; }
+    public void redisPort(Integer v) { this.redisPort = v; }
+    public void redisPassword(String v) { this.redisPassword = v; }
+    public void redisDatabase(Integer v) { this.redisDatabase = v; }
     public void outputDir(String v) { this.outputDir = v; }
     public boolean interactive() { return interactive; }
     public String groupId() { return groupId; }
@@ -232,5 +339,17 @@ public class GenerateCommand implements Callable<Integer> {
     public boolean nacos() { return nacos; }
     public String nacosAddr() { return nacosAddr; }
     public String nacosNamespace() { return nacosNamespace; }
+    public String dbType() { return dbType; }
+    public String dbHost() { return dbHost; }
+    public Integer dbPort() { return dbPort; }
+    public String dbName() { return dbName; }
+    public String dbUsername() { return dbUsername; }
+    public String dbPassword() { return dbPassword; }
+    public String orm() { return orm; }
+    public String cacheType() { return cacheType; }
+    public String redisHost() { return redisHost; }
+    public Integer redisPort() { return redisPort; }
+    public String redisPassword() { return redisPassword; }
+    public Integer redisDatabase() { return redisDatabase; }
     public String outputDir() { return outputDir; }
 }

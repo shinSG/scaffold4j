@@ -1,5 +1,6 @@
 package com.scaffold4j.generator;
 
+import com.scaffold4j.model.DatabaseType;
 import com.scaffold4j.model.LLMProvider;
 import com.scaffold4j.model.ProjectConfig;
 import com.scaffold4j.model.VectorStore;
@@ -60,6 +61,40 @@ public class DockerGenerator {
             if (envVar != null) {
                 sb.append("      - ").append(envVar).append("=${").append(envVar).append("}\n");
             }
+        }
+
+        // Database env vars for docker-compose
+        if (config.hasDatabase() && config.dbType() != DatabaseType.H2) {
+            sb.append("      - DB_URL=").append(config.dbType().jdbcUrl(
+                    config.dbType().id(), config.dbType().defaultPort(), config.effectiveDbName())).append("\n");
+            sb.append("      - DB_USERNAME=").append(config.dbUsername()).append("\n");
+            sb.append("      - DB_PASSWORD=").append(config.dbPassword()).append("\n");
+        }
+        if (config.hasRedisCache()) {
+            sb.append("      - REDIS_HOST=redis\n");
+        }
+        if (config.hasNacos()) {
+            sb.append("      - NACOS_ADDR=nacos:8848\n");
+        }
+
+        // depends_on section
+        StringBuilder dependsOn = new StringBuilder();
+        if (config.hasDatabase() && config.dbType() != DatabaseType.H2) {
+            dependsOn.append("        ").append(config.dbType().id()).append(":\n");
+            dependsOn.append("          condition: service_healthy\n");
+        }
+        if (config.hasRedisCache()) {
+            dependsOn.append("        redis:\n");
+            dependsOn.append("          condition: service_healthy\n");
+        }
+        if (!dependsOn.isEmpty()) {
+            sb.append("    depends_on:\n").append(dependsOn);
+        }
+
+        // networks
+        boolean hasNetworks = config.hasDatabase() || config.hasRedisCache() || config.hasNacos();
+        if (hasNetworks) {
+            sb.append("    networks:\n      - app-net\n");
         }
 
         // Ollama local service
@@ -141,8 +176,8 @@ public class DockerGenerator {
                 """);
         }
 
-        // Nacos
-        if (config.nacosEnabled()) {
+        // Nacos service
+        if (config.hasNacos()) {
             sb.append("""
 
                   nacos:
@@ -152,7 +187,93 @@ public class DockerGenerator {
                     ports:
                       - "8848:8848"
                       - "9848:9848"
+                    volumes:
+                      - nacos_data:/home/nacos/data
                 """);
+            if (hasNetworks) {
+                sb.append("    networks:\n      - app-net\n");
+            }
+        }
+
+        // Database service (MySQL or PostgreSQL)
+        if (config.hasDatabase() && config.dbType() == DatabaseType.MYSQL) {
+            String mysqlSection = """
+
+                  mysql:
+                    image: mysql:8.0
+                    environment:
+                      MYSQL_ROOT_PASSWORD: ${MYSQL_PASS}
+                      MYSQL_DATABASE: ${MYSQL_DB}
+                    ports:
+                      - "3306:3306"
+                    volumes:
+                      - mysql_data:/var/lib/mysql
+                    healthcheck:
+                      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+                      interval: 10s
+                      timeout: 5s
+                      retries: 5
+                """;
+            mysqlSection = mysqlSection
+                    .replace("${MYSQL_PASS}", config.dbPassword())
+                    .replace("${MYSQL_DB}", config.effectiveDbName());
+            sb.append(mysqlSection);
+            if (hasNetworks) {
+                sb.append("    networks:\n      - app-net\n");
+            }
+        } else if (config.hasDatabase() && config.dbType() == DatabaseType.POSTGRESQL) {
+            String pgSection = """
+
+                  postgres:
+                    image: postgres:16-alpine
+                    environment:
+                      POSTGRES_DB: ${PG_DB}
+                      POSTGRES_USER: ${PG_USER}
+                      POSTGRES_PASSWORD: ${PG_PASS}
+                    ports:
+                      - "5432:5432"
+                    volumes:
+                      - pg_data:/var/lib/postgresql/data
+                    healthcheck:
+                      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
+                      interval: 10s
+                      timeout: 5s
+                      retries: 5
+                """;
+            pgSection = pgSection
+                    .replace("${PG_DB}", config.effectiveDbName())
+                    .replace("${PG_USER}", config.dbUsername())
+                    .replace("${PG_PASS}", config.dbPassword());
+            sb.append(pgSection);
+            if (hasNetworks) {
+                sb.append("    networks:\n      - app-net\n");
+            }
+        }
+
+        // Redis cache service (separate from vector-store Redis)
+        if (config.hasRedisCache()) {
+            String redisCmd = "redis-server --appendonly yes";
+            if (config.redisPassword() != null && !config.redisPassword().isBlank()) {
+                redisCmd += " --requirepass " + config.redisPassword();
+            }
+            sb.append("""
+
+                  redis:
+                    image: redis:7-alpine
+                    command: """ + redisCmd + """
+                    ports:
+                      - "6379:6379"
+                    volumes:
+                      - redis_data:/data
+                    healthcheck:
+                      test: ["CMD", "redis-cli", "ping"]
+                      interval: 10s
+                      timeout: 5s
+                      retries: 5
+                """);
+            if (hasNetworks) {
+                sb.append("    networks:\n      - app-net\n");
+            }
         }
 
         // Volumes
@@ -163,8 +284,27 @@ public class DockerGenerator {
         if (config.hasLLMProvider(LLMProvider.OLLAMA)) {
             sb.append("  ollama_data:\n");
         }
-        if (config.vectorStore() == VectorStore.PGVECTOR) {
-            sb.append("  pgdata:\n");
+        if (config.vectorStore() == VectorStore.PGVECTOR || config.dbType() == DatabaseType.POSTGRESQL) {
+            sb.append("  pg_data:\n");
+        }
+        if (config.dbType() == DatabaseType.MYSQL) {
+            sb.append("  mysql_data:\n");
+        }
+        if (config.hasRedisCache()) {
+            sb.append("  redis_data:\n");
+        }
+        if (config.hasNacos()) {
+            sb.append("  nacos_data:\n");
+        }
+
+        // networks
+        if (hasNetworks) {
+            sb.append("""
+
+                networks:
+                  app-net:
+                    driver: bridge
+                """);
         }
 
         return sb.toString();
