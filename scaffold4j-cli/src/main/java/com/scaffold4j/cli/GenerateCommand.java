@@ -6,6 +6,7 @@ import com.scaffold4j.model.CacheType;
 import com.scaffold4j.model.DatabaseType;
 import com.scaffold4j.model.Feature;
 import com.scaffold4j.model.LLMProvider;
+import com.scaffold4j.model.MqType;
 import com.scaffold4j.model.OrmType;
 import com.scaffold4j.model.ProjectConfig;
 import com.scaffold4j.model.Protocol;
@@ -144,6 +145,36 @@ public class GenerateCommand implements Callable<Integer> {
             description = "ORM framework. Valid values: mybatis-plus, jpa. Default: mybatis-plus")
     private String orm;
 
+    // ---- Message Queue ----
+
+    @Option(names = {"--mq-type"},
+            description = "Message queue type. Valid values: rabbitmq, rocketmq, kafka, none. Default: none")
+    private String mqType;
+
+    @Option(names = {"--mq-host"},
+            description = "MQ server host. Default: localhost")
+    private String mqHost = "localhost";
+
+    @Option(names = {"--mq-port"},
+            description = "MQ server port. Default depends on mq-type.")
+    private Integer mqPort;
+
+    @Option(names = {"--mq-username"},
+            description = "MQ username. Default: guest")
+    private String mqUsername = "guest";
+
+    @Option(names = {"--mq-password"},
+            description = "MQ password. Default: guest")
+    private String mqPassword = "guest";
+
+    @Option(names = {"--mq-virtual-host"},
+            description = "RabbitMQ virtual host. Default: /")
+    private String mqVirtualHost = "/";
+
+    @Option(names = {"--mq-group"},
+            description = "Consumer group name. Default: scaffold4j-consumer")
+    private String mqGroup = "scaffold4j-consumer";
+
     // ---- Cache ----
 
     @Option(names = {"--cache-type"},
@@ -203,6 +234,7 @@ public class GenerateCommand implements Callable<Integer> {
         System.out.println("  Database:    " + config.dbType().displayName());
         System.out.println("  ORM:         " + config.ormType().displayName());
         System.out.println("  Cache:       " + config.cacheType().displayName());
+        System.out.println("  MQ:           " + config.mqType().displayName());
         System.out.println("  Nacos:       " + (config.hasNacos()
                 ? "discovery=" + config.hasNacosDiscovery() + " config=" + config.hasNacosConfig()
                 : "disabled"));
@@ -272,6 +304,17 @@ public class GenerateCommand implements Callable<Integer> {
         if (redisPort != null) cfg.redisPort(redisPort);
         if (redisPassword != null && !redisPassword.isBlank()) cfg.redisPassword(redisPassword);
         if (redisDatabase != null) cfg.redisDatabase(redisDatabase);
+
+        // MQ configuration
+        if (mqType != null && !mqType.isBlank()) {
+            cfg.mqType(MqType.fromId(mqType));
+        }
+        cfg.mqHost(mqHost);
+        if (mqPort != null) cfg.mqPort(mqPort);
+        if (mqUsername != null && !mqUsername.isBlank()) cfg.mqUsername(mqUsername);
+        if (mqPassword != null && !mqPassword.isBlank()) cfg.mqPassword(mqPassword);
+        if (mqVirtualHost != null && !mqVirtualHost.isBlank()) cfg.mqVirtualHost(mqVirtualHost);
+        if (mqGroup != null && !mqGroup.isBlank()) cfg.mqGroup(mqGroup);
 
         return cfg;
     }
@@ -351,5 +394,19 @@ public class GenerateCommand implements Callable<Integer> {
     public Integer redisPort() { return redisPort; }
     public String redisPassword() { return redisPassword; }
     public Integer redisDatabase() { return redisDatabase; }
+    public void mqType(String v) { this.mqType = v; }
+    public void mqHost(String v) { this.mqHost = v; }
+    public void mqPort(Integer v) { this.mqPort = v; }
+    public void mqUsername(String v) { this.mqUsername = v; }
+    public void mqPassword(String v) { this.mqPassword = v; }
+    public void mqVirtualHost(String v) { this.mqVirtualHost = v; }
+    public void mqGroup(String v) { this.mqGroup = v; }
+    public String mqType() { return mqType; }
+    public String mqHost() { return mqHost; }
+    public Integer mqPort() { return mqPort; }
+    public String mqUsername() { return mqUsername; }
+    public String mqPassword() { return mqPassword; }
+    public String mqVirtualHost() { return mqVirtualHost; }
+    public String mqGroup() { return mqGroup; }
     public String outputDir() { return outputDir; }
 }

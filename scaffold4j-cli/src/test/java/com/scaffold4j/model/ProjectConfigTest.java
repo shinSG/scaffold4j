@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.scaffold4j.model.DatabaseType;
 import com.scaffold4j.model.CacheType;
+import com.scaffold4j.model.MqType;
 import com.scaffold4j.model.OrmType;
 
 class ProjectConfigTest {
@@ -167,6 +168,85 @@ class ProjectConfigTest {
                 .basePackage("io.mycompany.ai");
 
         assertEquals("io.mycompany.ai", cfg.effectiveGroupId());
+    }
+
+    @Test
+    @DisplayName("Should default to no MQ")
+    void defaultNoMq() {
+        ProjectConfig cfg = new ProjectConfig()
+                .name("app")
+                .basePackage("com.example.ai");
+
+        assertFalse(cfg.hasMq());
+        assertEquals(MqType.NONE, cfg.mqType());
+    }
+
+    @Test
+    @DisplayName("Should support RabbitMQ configuration")
+    void rabbitMqConfig() {
+        ProjectConfig cfg = new ProjectConfig()
+                .name("mq-app")
+                .basePackage("com.example.ai")
+                .mqType(MqType.RABBITMQ)
+                .mqHost("rabbitmq.internal")
+                .mqPort(5672)
+                .mqUsername("admin")
+                .mqPassword("secret")
+                .mqVirtualHost("/ai")
+                .mqGroup("ai-consumer");
+
+        assertTrue(cfg.hasMq());
+        assertTrue(cfg.isRabbitMq());
+        assertFalse(cfg.isRocketMq());
+        assertFalse(cfg.isKafka());
+        assertEquals(5672, cfg.mqPort());
+        assertEquals(5672, cfg.effectiveMqPort());
+        assertEquals("admin", cfg.mqUsername());
+        assertEquals("secret", cfg.mqPassword());
+        assertEquals("/ai", cfg.mqVirtualHost());
+        assertEquals("ai-consumer", cfg.mqGroup());
+    }
+
+    @Test
+    @DisplayName("Should support RocketMQ configuration")
+    void rocketMqConfig() {
+        ProjectConfig cfg = new ProjectConfig()
+                .name("mq-app")
+                .basePackage("com.example.ai")
+                .mqType(MqType.ROCKETMQ);
+
+        assertTrue(cfg.hasMq());
+        assertTrue(cfg.isRocketMq());
+        assertFalse(cfg.isRabbitMq());
+        assertFalse(cfg.isKafka());
+        assertEquals(9876, cfg.effectiveMqPort());
+    }
+
+    @Test
+    @DisplayName("Should support Kafka configuration")
+    void kafkaMqConfig() {
+        ProjectConfig cfg = new ProjectConfig()
+                .name("mq-app")
+                .basePackage("com.example.ai")
+                .mqType(MqType.KAFKA);
+
+        assertTrue(cfg.hasMq());
+        assertTrue(cfg.isKafka());
+        assertFalse(cfg.isRabbitMq());
+        assertFalse(cfg.isRocketMq());
+        assertEquals(9092, cfg.effectiveMqPort());
+    }
+
+    @Test
+    @DisplayName("Should use default port when mqPort is 0")
+    void defaultMqPort() {
+        ProjectConfig cfg = new ProjectConfig()
+                .name("mq-app")
+                .basePackage("com.example.ai")
+                .mqType(MqType.RABBITMQ)
+                .mqPort(0);
+
+        assertEquals(5672, cfg.effectiveMqPort());
     }
 
     @Test

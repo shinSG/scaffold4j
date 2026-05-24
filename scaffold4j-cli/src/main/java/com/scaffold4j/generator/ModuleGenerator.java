@@ -2449,6 +2449,550 @@ public class ModuleGenerator {
                 """.formatted(pkg, config.effectiveArtifactId());
     }
 
+    // ==================== MQ Domain ====================
+
+    public String generateMqMessage(String pkg) {
+        return """
+                package %s.domain.mq;
+
+                import lombok.AllArgsConstructor;
+                import lombok.Builder;
+                import lombok.Data;
+                import lombok.NoArgsConstructor;
+
+                import java.util.Map;
+                import java.util.UUID;
+
+                @Data
+                @Builder
+                @NoArgsConstructor
+                @AllArgsConstructor
+                public class MqMessage<T> {
+
+                    @Builder.Default
+                    private String messageId = UUID.randomUUID().toString();
+
+                    private String correlationId;
+                    private String replyTo;
+                    private Map<String, String> headers;
+                    private T payload;
+
+                    @Builder.Default
+                    private long timestamp = System.currentTimeMillis();
+                }
+                """.formatted(pkg);
+    }
+
+    public String generateMqAIRequest(String pkg) {
+        return """
+                package %s.domain.mq;
+
+                import lombok.AllArgsConstructor;
+                import lombok.Builder;
+                import lombok.Data;
+                import lombok.NoArgsConstructor;
+
+                import java.util.Map;
+
+                @Data
+                @Builder
+                @NoArgsConstructor
+                @AllArgsConstructor
+                public class MqAIRequest {
+
+                    private String conversationId;
+                    private String prompt;
+
+                    @Builder.Default
+                    private Map<String, Object> context = Map.of();
+
+                    @Builder.Default
+                    private int maxTokens = 4096;
+
+                    @Builder.Default
+                    private double temperature = 0.7;
+                }
+                """.formatted(pkg);
+    }
+
+    public String generateMqAIResponse(String pkg) {
+        return """
+                package %s.domain.mq;
+
+                import lombok.AllArgsConstructor;
+                import lombok.Builder;
+                import lombok.Data;
+                import lombok.NoArgsConstructor;
+
+                @Data
+                @Builder
+                @NoArgsConstructor
+                @AllArgsConstructor
+                public class MqAIResponse {
+
+                    private String requestId;
+                    private String conversationId;
+                    private String content;
+                    private String model;
+                    private int tokensUsed;
+                    private boolean success;
+                    private String errorMessage;
+                    private long processingTimeMs;
+                }
+                """.formatted(pkg);
+    }
+
+    // ==================== MQ Infra ====================
+
+    public String generateMqConfig(String pkg) {
+        return switch (config.mqType()) {
+            case RABBITMQ -> generateRabbitMqConfig(pkg);
+            case ROCKETMQ -> generateRocketMqConfig(pkg);
+            case KAFKA -> generateKafkaMqConfig(pkg);
+            default -> "";
+        };
+    }
+
+    private String generateRabbitMqConfig(String pkg) {
+        return """
+                package %s.infra.mq;
+
+                import org.springframework.amqp.core.Binding;
+                import org.springframework.amqp.core.BindingBuilder;
+                import org.springframework.amqp.core.DirectExchange;
+                import org.springframework.amqp.core.Queue;
+                import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+                import org.springframework.amqp.rabbit.core.RabbitTemplate;
+                import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+                import org.springframework.context.annotation.Bean;
+                import org.springframework.context.annotation.Configuration;
+
+                @Configuration
+                public class MqConfig {
+
+                    public static final String REQUEST_QUEUE = "ai.requests";
+                    public static final String RESPONSE_QUEUE = "ai.responses";
+                    public static final String EXCHANGE = "ai.exchange";
+                    public static final String REQUEST_ROUTING_KEY = "ai.request";
+                    public static final String RESPONSE_ROUTING_KEY = "ai.response";
+
+                    @Bean
+                    public Queue requestQueue() {
+                        return new Queue(REQUEST_QUEUE, true);
+                    }
+
+                    @Bean
+                    public Queue responseQueue() {
+                        return new Queue(RESPONSE_QUEUE, true);
+                    }
+
+                    @Bean
+                    public DirectExchange aiExchange() {
+                        return new DirectExchange(EXCHANGE);
+                    }
+
+                    @Bean
+                    public Binding requestBinding(Queue requestQueue, DirectExchange aiExchange) {
+                        return BindingBuilder.bind(requestQueue).to(aiExchange).with(REQUEST_ROUTING_KEY);
+                    }
+
+                    @Bean
+                    public Binding responseBinding(Queue responseQueue, DirectExchange aiExchange) {
+                        return BindingBuilder.bind(responseQueue).to(aiExchange).with(RESPONSE_ROUTING_KEY);
+                    }
+
+                    @Bean
+                    public Jackson2JsonMessageConverter messageConverter() {
+                        return new Jackson2JsonMessageConverter();
+                    }
+
+                    @Bean
+                    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory,
+                                                          Jackson2JsonMessageConverter messageConverter) {
+                        RabbitTemplate template = new RabbitTemplate(connectionFactory);
+                        template.setMessageConverter(messageConverter);
+                        return template;
+                    }
+                }
+                """.formatted(pkg);
+    }
+
+    private String generateRocketMqConfig(String pkg) {
+        return """
+                package %s.infra.mq;
+
+                import org.apache.rocketmq.spring.core.RocketMQTemplate;
+                import org.springframework.context.annotation.Bean;
+                import org.springframework.context.annotation.Configuration;
+
+                @Configuration
+                public class MqConfig {
+
+                    public static final String REQUEST_TOPIC = "ai-requests";
+                    public static final String RESPONSE_TOPIC = "ai-responses";
+
+                    @Bean
+                    public RocketMQTemplate rocketMQTemplate(org.apache.rocketmq.spring.core.RocketMQTemplate template) {
+                        return template;
+                    }
+                }
+                """.formatted(pkg);
+    }
+
+    private String generateKafkaMqConfig(String pkg) {
+        return """
+                package %s.infra.mq;
+
+                import org.apache.kafka.clients.admin.NewTopic;
+                import org.springframework.context.annotation.Bean;
+                import org.springframework.context.annotation.Configuration;
+                import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+                import org.springframework.kafka.core.ConsumerFactory;
+                import org.springframework.kafka.core.KafkaTemplate;
+                import org.springframework.kafka.core.ProducerFactory;
+
+                @Configuration
+                public class MqConfig {
+
+                    public static final String REQUEST_TOPIC = "ai.requests";
+                    public static final String RESPONSE_TOPIC = "ai.responses";
+
+                    @Bean
+                    public NewTopic requestTopic() {
+                        return new NewTopic(REQUEST_TOPIC, 3, (short) 1);
+                    }
+
+                    @Bean
+                    public NewTopic responseTopic() {
+                        return new NewTopic(RESPONSE_TOPIC, 3, (short) 1);
+                    }
+
+                    @Bean
+                    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory(
+                            ConsumerFactory<String, Object> consumerFactory) {
+                        ConcurrentKafkaListenerContainerFactory<String, Object> factory =
+                                new ConcurrentKafkaListenerContainerFactory<>();
+                        factory.setConsumerFactory(consumerFactory);
+                        factory.setConcurrency(4);
+                        return factory;
+                    }
+                }
+                """.formatted(pkg);
+    }
+
+    public String generateMqMessageProducer(String pkg) {
+        return switch (config.mqType()) {
+            case RABBITMQ -> generateRabbitMqMessageProducer(pkg);
+            case ROCKETMQ -> generateRocketMqMessageProducer(pkg);
+            case KAFKA -> generateKafkaMqMessageProducer(pkg);
+            default -> "";
+        };
+    }
+
+    private String generateRabbitMqMessageProducer(String pkg) {
+        return """
+                package %s.infra.mq;
+
+                import %s.domain.mq.MqAIResponse;
+                import %s.domain.mq.MqMessage;
+                import lombok.RequiredArgsConstructor;
+                import lombok.extern.slf4j.Slf4j;
+                import org.springframework.amqp.rabbit.core.RabbitTemplate;
+                import org.springframework.stereotype.Component;
+
+                @Slf4j
+                @Component
+                @RequiredArgsConstructor
+                public class MqMessageProducer {
+
+                    private final RabbitTemplate rabbitTemplate;
+
+                    public void sendResponse(MqMessage<MqAIResponse> message) {
+                        String routingKey = message.getReplyTo() != null
+                                ? message.getReplyTo() : MqConfig.RESPONSE_ROUTING_KEY;
+                        rabbitTemplate.convertAndSend(MqConfig.EXCHANGE, routingKey, message);
+                        log.debug("Sent AI response: messageId={}, correlationId={}",
+                                message.getMessageId(), message.getCorrelationId());
+                    }
+                }
+                """.formatted(pkg, pkg, pkg);
+    }
+
+    private String generateRocketMqMessageProducer(String pkg) {
+        return """
+                package %s.infra.mq;
+
+                import %s.domain.mq.MqAIResponse;
+                import %s.domain.mq.MqMessage;
+                import lombok.RequiredArgsConstructor;
+                import lombok.extern.slf4j.Slf4j;
+                import org.apache.rocketmq.spring.core.RocketMQTemplate;
+                import org.springframework.messaging.support.MessageBuilder;
+                import org.springframework.stereotype.Component;
+
+                @Slf4j
+                @Component
+                @RequiredArgsConstructor
+                public class MqMessageProducer {
+
+                    private final RocketMQTemplate rocketMQTemplate;
+
+                    public void sendResponse(MqMessage<MqAIResponse> message) {
+                        String topic = MqConfig.RESPONSE_TOPIC;
+                        org.springframework.messaging.Message<MqMessage<MqAIResponse>> msg =
+                                MessageBuilder.withPayload(message).build();
+                        rocketMQTemplate.send(topic, msg);
+                        log.debug("Sent AI response: messageId={}, correlationId={}",
+                                message.getMessageId(), message.getCorrelationId());
+                    }
+                }
+                """.formatted(pkg, pkg, pkg);
+    }
+
+    private String generateKafkaMqMessageProducer(String pkg) {
+        return """
+                package %s.infra.mq;
+
+                import %s.domain.mq.MqAIResponse;
+                import %s.domain.mq.MqMessage;
+                import lombok.RequiredArgsConstructor;
+                import lombok.extern.slf4j.Slf4j;
+                import org.springframework.kafka.core.KafkaTemplate;
+                import org.springframework.kafka.support.SendResult;
+                import org.springframework.stereotype.Component;
+
+                import java.util.concurrent.CompletableFuture;
+
+                @Slf4j
+                @Component
+                @RequiredArgsConstructor
+                public class MqMessageProducer {
+
+                    private final KafkaTemplate<String, MqMessage<MqAIResponse>> kafkaTemplate;
+
+                    public void sendResponse(MqMessage<MqAIResponse> message) {
+                        CompletableFuture<SendResult<String, MqMessage<MqAIResponse>>> future =
+                                kafkaTemplate.send(MqConfig.RESPONSE_TOPIC,
+                                        message.getCorrelationId(), message);
+                        future.whenComplete((result, ex) -> {
+                            if (ex != null) {
+                                log.error("Failed to send AI response: messageId={}", message.getMessageId(), ex);
+                            } else {
+                                log.debug("Sent AI response: messageId={}, offset={}",
+                                        message.getMessageId(), result.getRecordMetadata().offset());
+                            }
+                        });
+                    }
+                }
+                """.formatted(pkg, pkg, pkg);
+    }
+
+    public String generateMqMessageListener(String pkg) {
+        return switch (config.mqType()) {
+            case RABBITMQ -> generateRabbitMqMessageListener(pkg);
+            case ROCKETMQ -> generateRocketMqMessageListener(pkg);
+            case KAFKA -> generateKafkaMqMessageListener(pkg);
+            default -> "";
+        };
+    }
+
+    private String generateRabbitMqMessageListener(String pkg) {
+        return """
+                package %s.infra.mq;
+
+                import %s.domain.mq.MqAIRequest;
+                import %s.domain.mq.MqMessage;
+                import %s.app.mq.MqAIProcessingService;
+                import com.fasterxml.jackson.databind.ObjectMapper;
+                import lombok.RequiredArgsConstructor;
+                import lombok.extern.slf4j.Slf4j;
+                import org.springframework.amqp.rabbit.annotation.RabbitListener;
+                import org.springframework.stereotype.Component;
+
+                @Slf4j
+                @Component
+                @RequiredArgsConstructor
+                public class MqMessageListener {
+
+                    private final MqAIProcessingService processingService;
+                    private final ObjectMapper objectMapper;
+
+                    @RabbitListener(queues = MqConfig.REQUEST_QUEUE)
+                    public void handleRequest(MqMessage<MqAIRequest> message) {
+                        log.info("Received AI request: messageId={}, correlationId={}",
+                                message.getMessageId(), message.getCorrelationId());
+                        try {
+                            processingService.process(message);
+                        } catch (Exception e) {
+                            log.error("Failed to process AI request: messageId={}", message.getMessageId(), e);
+                        }
+                    }
+                }
+                """.formatted(pkg, pkg, pkg, pkg);
+    }
+
+    private String generateRocketMqMessageListener(String pkg) {
+        return """
+                package %s.infra.mq;
+
+                import %s.domain.mq.MqAIRequest;
+                import %s.domain.mq.MqMessage;
+                import %s.app.mq.MqAIProcessingService;
+                import com.fasterxml.jackson.databind.ObjectMapper;
+                import lombok.RequiredArgsConstructor;
+                import lombok.extern.slf4j.Slf4j;
+                import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
+                import org.apache.rocketmq.spring.core.RocketMQListener;
+                import org.springframework.stereotype.Component;
+
+                @Slf4j
+                @Component
+                @RequiredArgsConstructor
+                @RocketMQMessageListener(
+                    topic = MqConfig.REQUEST_TOPIC,
+                    consumerGroup = "${rocketmq.consumer.group:scaffold4j-consumer}"
+                )
+                public class MqMessageListener implements RocketMQListener<MqMessage<MqAIRequest>> {
+
+                    private final MqAIProcessingService processingService;
+
+                    @Override
+                    public void onMessage(MqMessage<MqAIRequest> message) {
+                        log.info("Received AI request: messageId={}, correlationId={}",
+                                message.getMessageId(), message.getCorrelationId());
+                        try {
+                            processingService.process(message);
+                        } catch (Exception e) {
+                            log.error("Failed to process AI request: messageId={}", message.getMessageId(), e);
+                        }
+                    }
+                }
+                """.formatted(pkg, pkg, pkg, pkg);
+    }
+
+    private String generateKafkaMqMessageListener(String pkg) {
+        return """
+                package %s.infra.mq;
+
+                import %s.domain.mq.MqAIRequest;
+                import %s.domain.mq.MqMessage;
+                import %s.app.mq.MqAIProcessingService;
+                import lombok.RequiredArgsConstructor;
+                import lombok.extern.slf4j.Slf4j;
+                import org.springframework.kafka.annotation.KafkaListener;
+                import org.springframework.stereotype.Component;
+
+                @Slf4j
+                @Component
+                @RequiredArgsConstructor
+                public class MqMessageListener {
+
+                    private final MqAIProcessingService processingService;
+
+                    @KafkaListener(
+                        topics = MqConfig.REQUEST_TOPIC,
+                        groupId = "${spring.kafka.consumer.group-id:scaffold4j-consumer}",
+                        containerFactory = "kafkaListenerContainerFactory"
+                    )
+                    public void handleRequest(MqMessage<MqAIRequest> message) {
+                        log.info("Received AI request: messageId={}, correlationId={}",
+                                message.getMessageId(), message.getCorrelationId());
+                        try {
+                            processingService.process(message);
+                        } catch (Exception e) {
+                            log.error("Failed to process AI request: messageId={}", message.getMessageId(), e);
+                        }
+                    }
+                }
+                """.formatted(pkg, pkg, pkg, pkg);
+    }
+
+    // ==================== MQ App ====================
+
+    public String generateMqAIProcessingService(String pkg) {
+        return """
+                package %s.app.mq;
+
+                import %s.domain.mq.MqAIRequest;
+                import %s.domain.mq.MqAIResponse;
+                import %s.domain.mq.MqMessage;
+                import %s.infra.mq.MqMessageProducer;
+                import %s.app.service.ChatService;
+                import %s.domain.dto.ChatRequest;
+                import %s.domain.dto.ChatResponse;
+                import lombok.RequiredArgsConstructor;
+                import lombok.extern.slf4j.Slf4j;
+                import org.springframework.stereotype.Service;
+
+                @Slf4j
+                @Service
+                @RequiredArgsConstructor
+                public class MqAIProcessingService {
+
+                    private final ChatService chatService;
+                    private final MqMessageProducer messageProducer;
+
+                    public void process(MqMessage<MqAIRequest> requestMessage) {
+                        long startTime = System.currentTimeMillis();
+                        MqAIRequest request = requestMessage.getPayload();
+
+                        try {
+                            log.info("Processing AI request: messageId={}, prompt=\\"{}\\"",
+                                    requestMessage.getMessageId(), request.getPrompt());
+
+                            ChatRequest chatRequest = ChatRequest.builder()
+                                    .conversationId(request.getConversationId())
+                                    .message(request.getPrompt())
+                                    .maxTokens(request.getMaxTokens())
+                                    .temperature(request.getTemperature())
+                                    .build();
+
+                            ChatResponse chatResponse = chatService.chat(chatRequest);
+
+                            MqAIResponse response = MqAIResponse.builder()
+                                    .requestId(requestMessage.getMessageId())
+                                    .conversationId(request.getConversationId())
+                                    .content(chatResponse.getContent())
+                                    .model(chatResponse.getModel())
+                                    .tokensUsed(chatResponse.getTokensUsed())
+                                    .success(true)
+                                    .processingTimeMs(System.currentTimeMillis() - startTime)
+                                    .build();
+
+                            MqMessage<MqAIResponse> responseMessage = MqMessage.<MqAIResponse>builder()
+                                    .correlationId(requestMessage.getCorrelationId())
+                                    .replyTo(requestMessage.getReplyTo())
+                                    .payload(response)
+                                    .build();
+
+                            messageProducer.sendResponse(responseMessage);
+                            log.info("AI request processed successfully: messageId={}, elapsed={}ms",
+                                    requestMessage.getMessageId(), response.getProcessingTimeMs());
+
+                        } catch (Exception e) {
+                            log.error("AI request processing failed: messageId={}", requestMessage.getMessageId(), e);
+
+                            MqAIResponse errorResponse = MqAIResponse.builder()
+                                    .requestId(requestMessage.getMessageId())
+                                    .conversationId(request.getConversationId())
+                                    .success(false)
+                                    .errorMessage(e.getMessage())
+                                    .processingTimeMs(System.currentTimeMillis() - startTime)
+                                    .build();
+
+                            MqMessage<MqAIResponse> responseMessage = MqMessage.<MqAIResponse>builder()
+                                    .correlationId(requestMessage.getCorrelationId())
+                                    .replyTo(requestMessage.getReplyTo())
+                                    .payload(errorResponse)
+                                    .build();
+
+                            messageProducer.sendResponse(responseMessage);
+                        }
+                    }
+                }
+                """.formatted(pkg, pkg, pkg, pkg, pkg, pkg, pkg, pkg);
+    }
+
     // ==================== utility ====================
 
     private static String capitalize(String s) {

@@ -102,7 +102,23 @@ public final class InteractiveWizard {
             cmd.redisDatabase(Integer.parseInt(redisDbStr));
         }
 
-        // 11. Output
+        // 11. Message Queue
+        System.out.println();
+        System.out.println("MQ types: rabbitmq, rocketmq, kafka, none");
+        cmd.mqType(prompt(console, "MQ type", cmd.mqType() != null ? cmd.mqType() : "none"));
+        if (cmd.mqType() != null && !"none".equalsIgnoreCase(cmd.mqType())) {
+            cmd.mqHost(prompt(console, "MQ host", cmd.mqHost() != null ? cmd.mqHost() : "localhost"));
+            String mqPortStr = prompt(console, "MQ port", cmd.mqPort() != null ? String.valueOf(cmd.mqPort()) : "");
+            cmd.mqPort(mqPortStr.isEmpty() ? null : Integer.parseInt(mqPortStr));
+            cmd.mqUsername(prompt(console, "MQ username", cmd.mqUsername() != null ? cmd.mqUsername() : "guest"));
+            cmd.mqPassword(prompt(console, "MQ password", cmd.mqPassword() != null ? cmd.mqPassword() : "guest"));
+            if ("rabbitmq".equalsIgnoreCase(cmd.mqType())) {
+                cmd.mqVirtualHost(prompt(console, "RabbitMQ virtual host", cmd.mqVirtualHost() != null ? cmd.mqVirtualHost() : "/"));
+            }
+            cmd.mqGroup(prompt(console, "Consumer group", cmd.mqGroup() != null ? cmd.mqGroup() : "scaffold4j-consumer"));
+        }
+
+        // 12. Output
         cmd.outputDir(prompt(console, "Output directory", cmd.outputDir()));
 
         System.out.println();

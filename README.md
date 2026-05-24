@@ -13,6 +13,7 @@
 - **SSE 流式输出**: 基于 Spring WebFlux 的 Server-Sent Events
 - **WebSocket**: 双向实时 AI 对话
 - **Nacos**: 服务注册与配置管理
+- **异步消息队列**: RabbitMQ / RocketMQ / Kafka，支持请求-应答异步 AI 处理
 - **向量数据库**: PGVector、Milvus、Chroma、Pinecone、Elasticsearch、Redis、Qdrant、Weaviate
 - **配置化管理**: 统一的 `scaffold4j.*` 配置命名空间，所有参数支持环境变量覆盖
 
@@ -56,6 +57,20 @@ scaffold4j generate \
   --nacos=true \
   --output-dir=./output
 ```
+
+#### 异步 MQ AI 处理
+
+```bash
+scaffold4j generate \
+  --name=async-ai-worker \
+  --package=com.example.ai \
+  --protocols=rest \
+  --mq-type=rabbitmq \
+  --llm-providers=openai \
+  --features=sse
+```
+
+生成的 Worker 会监听 `ai.requests` 队列，收到 AI 处理请求后调用 LLM，并将结果回复到 `ai.responses` 队列。
 
 #### 交互式模式
 
@@ -104,6 +119,10 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `--llm-providers` | openai | 逗号分隔的 LLM 供应商 |
 | `--vector-store` | pgvector | 向量数据库 |
 | `--features` | 无 | memory,rag,sse,websocket 组合 |
+| `--mq-type` | none | rabbitmq / rocketmq / kafka / none |
+| `--mq-host` | localhost | MQ 服务器地址 |
+| `--mq-port` | 默认端口 | MQ 端口 (RabbitMQ=5672, RocketMQ=9876, Kafka=9092) |
+| `--mq-group` | scaffold4j-consumer | 消费者组名 |
 | `--nacos` | false | 是否启用 Nacos |
 | `--nacos-addr` | localhost:8848 | Nacos 地址 |
 | `--output-dir` | ./ | 输出目录 |
@@ -121,9 +140,9 @@ my-ai-app/
 │   └── docker-compose.yml
 │
 ├── my-ai-app-common/                # 公共模块: 常量、异常、统一响应
-├── my-ai-app-domain/                # 领域模块: 实体、DTO、枚举
-├── my-ai-app-infra/                 # 基础设施: LLM适配、向量存储、记忆、RAG
-├── my-ai-app-app/                   # 应用层: 服务、Agent、工具、Prompt模板
+├── my-ai-app-domain/                # 领域模块: 实体、DTO、枚举、MQ消息体
+├── my-ai-app-infra/                 # 基础设施: LLM适配、向量存储、记忆、RAG、MQ
+├── my-ai-app-app/                   # 应用层: 服务、Agent、工具、Prompt模板、MQ处理
 ├── my-ai-app-api/                   # API层: REST/MCP/A2A/ACP/WebSocket
 │   ├── rest/                        # RESTful 控制器
 │   ├── mcp/                         # MCP Server + Tools (conditional)
@@ -156,6 +175,14 @@ my-ai-app/
 | 通义千问 | `spring-ai-starter-model-dashscope` | - | DASHSCOPE_API_KEY |
 | Moonshot | - | - | MOONSHOT_API_KEY |
 | 豆包 | - | - | DOUBAO_API_KEY |
+
+### Message Queue
+
+| MQ | 技术栈 | 适用场景 |
+|----|-------|---------|
+| RabbitMQ | Spring AMQP | 通用异步任务、请求-应答模式 |
+| RocketMQ | RocketMQ Spring Boot Starter | 阿里云生态、高吞吐事务消息 |
+| Kafka | Spring Kafka | 事件溯源、日志流处理 |
 
 ### Vector Stores
 

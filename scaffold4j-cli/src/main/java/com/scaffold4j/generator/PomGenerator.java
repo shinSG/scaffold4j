@@ -464,6 +464,47 @@ public class PomGenerator {
                             </dependency>
                             """);
                 }
+
+                // MQ dependencies
+                if (config.hasMq()) {
+                    dependencies.append("""
+                            <!-- Jackson for message serialization -->
+                            <dependency>
+                                <groupId>com.fasterxml.jackson.core</groupId>
+                                <artifactId>jackson-databind</artifactId>
+                            </dependency>
+                            """);
+                    switch (config.mqType()) {
+                        case RABBITMQ:
+                            dependencies.append("""
+                                    <!-- Spring AMQP (RabbitMQ) -->
+                                    <dependency>
+                                        <groupId>org.springframework.boot</groupId>
+                                        <artifactId>spring-boot-starter-amqp</artifactId>
+                                    </dependency>
+                                    """);
+                            break;
+                        case ROCKETMQ:
+                            dependencies.append("""
+                                    <!-- RocketMQ Spring Boot Starter -->
+                                    <dependency>
+                                        <groupId>org.apache.rocketmq</groupId>
+                                        <artifactId>rocketmq-spring-boot-starter</artifactId>
+                                        <version>2.3.0</version>
+                                    </dependency>
+                                    """);
+                            break;
+                        case KAFKA:
+                            dependencies.append("""
+                                    <!-- Spring Kafka -->
+                                    <dependency>
+                                        <groupId>org.springframework.kafka</groupId>
+                                        <artifactId>spring-kafka</artifactId>
+                                    </dependency>
+                                    """);
+                            break;
+                    }
+                }
                 break;
 
             case "app":

@@ -273,6 +273,70 @@ public class ConfigGenerator {
                     """);
         }
 
+        // MQ configuration
+        if (config.hasMq()) {
+            sb.append("""
+                    # ===========================================================
+                    # Message Queue Configuration
+                    # ===========================================================
+                    scaffold4j:
+                      mq:
+                        type: %s
+                        request-queue: ai.requests
+                        response-queue: ai.responses
+                        consumer-group: %s
+                    """.formatted(config.mqType().id(), config.mqGroup()));
+
+            switch (config.mqType()) {
+                case RABBITMQ:
+                    sb.append("""
+                            spring:
+                              rabbitmq:
+                                host: ${RABBITMQ_HOST:%s}
+                                port: ${RABBITMQ_PORT:%d}
+                                username: ${RABBITMQ_USERNAME:%s}
+                                password: ${RABBITMQ_PASSWORD:%s}
+                                virtual-host: ${RABBITMQ_VIRTUAL_HOST:%s}
+                                listener:
+                                  simple:
+                                    concurrency: 4
+                                    max-concurrency: 10
+                                    prefetch: 10
+                            """.formatted(
+                            config.mqHost(), config.effectiveMqPort(),
+                            config.mqUsername(), config.mqPassword(),
+                            config.mqVirtualHost()));
+                    break;
+                case ROCKETMQ:
+                    sb.append("""
+                            rocketmq:
+                              name-server: ${ROCKETMQ_NAMESRV:%s:%d}
+                              producer:
+                                group: ${ROCKETMQ_PRODUCER_GROUP:scaffold4j-producer}
+                                send-message-timeout: 3000
+                            """.formatted(config.mqHost(), config.effectiveMqPort()));
+                    break;
+                case KAFKA:
+                    sb.append("""
+                            spring:
+                              kafka:
+                                bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:%s:%d}
+                                producer:
+                                  key-serializer: org.apache.kafka.common.serialization.StringSerializer
+                                  value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+                                consumer:
+                                  key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+                                  value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+                                  group-id: %s
+                                  properties:
+                                    spring.json.trusted.packages: "*"
+                                listener:
+                                  concurrency: 4
+                            """.formatted(config.mqHost(), config.effectiveMqPort(), config.mqGroup()));
+                    break;
+            }
+        }
+
         // Logging
         sb.append("""
                 # ===========================================================

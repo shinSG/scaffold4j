@@ -226,6 +226,53 @@ acp        Agent Communication Protocol   IBM/BeeAI ACP (merging into A2A)
 
 可选值：`pgvector`、`milvus`、`chroma`、`pinecone`、`elasticsearch`、`redis`、`weaviate`、`qdrant`、`simple`
 
+### 可选参数 — 消息队列
+
+| 参数 | 默认值 | 可选值 | 说明 |
+|-----|--------|--------|------|
+| `--mq-type` | `none` | `rabbitmq`、`rocketmq`、`kafka`、`none` | 消息队列类型 |
+| `--mq-host` | `localhost` | — | MQ 服务器地址 |
+| `--mq-port` | 自动（按类型） | — | MQ 端口（RabbitMQ=5672, RocketMQ=9876, Kafka=9092） |
+| `--mq-username` | `guest` | — | MQ 用户名 |
+| `--mq-password` | `guest` | — | MQ 密码 |
+| `--mq-virtual-host` | `/` | — | RabbitMQ virtual-host |
+| `--mq-group` | `scaffold4j-consumer` | — | 消费者组名 / Queue Group |
+
+启用 MQ 后生成的内容：
+
+| 类型 | 生成内容 | 技术栈 |
+|------|---------|--------|
+| RabbitMQ | `MqConfig`（Queue/Exchange/Binding）+ `MqMessageProducer` + `MqMessageListener`（@RabbitListener） | Spring AMQP |
+| RocketMQ | `MqConfig` + `MqMessageProducer`（RocketMQTemplate）+ `MqMessageListener`（RocketMQMessageListener） | RocketMQ Spring Boot Starter |
+| Kafka | `MqConfig`（Topic创建）+ `MqMessageProducer`（KafkaTemplate）+ `MqMessageListener`（@KafkaListener） | Spring Kafka |
+
+所有 MQ 类型统一生成 Domain 层的消息体：
+- `MqMessage<T>` — 通用消息载体（messageId / correlationId / replyTo / headers / payload）
+- `MqAIRequest` — AI 处理请求（conversationId / prompt / maxTokens / temperature）
+- `MqAIResponse` — AI 处理响应（content / model / tokensUsed / success / errorMessage）
+
+App 层统一生成 `MqAIProcessingService`：消费消息 → 调用 `ChatService.chat()` → 产生 `MqAIResponse` → 发送回 MQ。
+
+```mermaid
+sequenceDiagram
+    participant External as 外部系统
+    participant Queue as MQ (ai.requests)
+    participant Listener as MqMessageListener
+    participant Service as MqAIProcessingService
+    participant Chat as ChatService
+    participant Producer as MqMessageProducer
+    participant Reply as MQ (ai.responses)
+
+    External->>Queue: 发送 MqMessage<MqAIRequest>
+    Queue->>Listener: 消费消息
+    Listener->>Service: process(message)
+    Service->>Chat: chat(chatRequest)
+    Chat-->>Service: ChatResponse
+    Service->>Producer: sendResponse(responseMessage)
+    Producer->>Reply: 发送 MqMessage<MqAIResponse>
+    Reply-->>External: 接收 AI 处理结果
+```
+
 ### 可选参数 — 服务注册
 
 | 参数 | 默认值 | 说明 |
@@ -390,7 +437,49 @@ scaffold4j generate \
 - 通过 A2A 协议与其他 Agent 协作（Agent Card 在 `/.well-known/agent.json`）
 - LangGraph4j 工作流骨架
 
-### 示例 6：交互式生成
+### 示例 6：异步 MQ AI Worker
+
+```bash
+scaffold4j generate \
+  --name=ai-worker \
+  --package=com.company.worker \
+  --protocols=rest \
+  --mq-type=rabbitmq \
+  --mq-host=rabbitmq.internal \
+  --mq-group=ai-worker-group \
+  --llm-providers=openai,anthropic \
+  --features=sse
+```
+
+**生成结果**：
+- RabbitMQ 配置（Queue/Exchange/Binding 自动声明）
+- `MqMessageListener` 监听 `ai.requests` 队列
+- `MqAIProcessingService` 编排 AI 处理流程
+- 处理结果通过 `MqMessageProducer` 回复到 `ai.responses` 队列
+
+**启动基础设施**：
+
+```bash
+cd ai-worker/docker
+docker-compose up -d rabbitmq
+```
+
+**启动 Worker**：
+
+```bash
+export OPENAI_API_KEY=sk-...
+cd ai-worker
+./mvnw -pl ai-worker-bootstrap spring-boot:run
+```
+
+**测试流程**（通过 RabbitMQ 管理界面或 CLI）：
+
+```bash
+# 向 ai.requests 队列发送测试消息
+# Worker 自动消费、调用 LLM、回复到 ai.responses 队列
+```
+
+### 示例 7：交互式生成
 
 ```bash
 scaffold4j generate --interactive
@@ -448,6 +537,10 @@ my-ai-app/
 │       ├── dto/ChatRequest.java          # 请求体
 │       ├── dto/ChatResponse.java         # 响应体
 │       ├── dto/StreamData.java           # SSE 流数据
+│       ├── mq/                           # MQ 消息体（选择 MQ 时生成）
+│       │   ├── MqMessage.java            # 通用消息载体
+│       │   ├── MqAIRequest.java          # AI 处理请求
+│       │   └── MqAIResponse.java         # AI 处理响应
 │       └── enums/                        # MessageRole / LLMProviderType
 │
 ├── my-ai-app-infra/                     # 基础设施模块
@@ -456,12 +549,18 @@ my-ai-app/
 │       ├── llm/                          # LLMProviderAdapter 接口 + 各供应商实现 + Factory
 │       ├── vectorstore/                  # VectorStoreAdapter
 │       ├── memory/                       # ChatMemoryStore + ConversationRepository
+│       ├── mq/                           # MQ 基础设施（选择 MQ 时生成）
+│       │   ├── MqConfig.java             # Queue/Exchange/Topic 配置
+│       │   ├── MqMessageProducer.java    # 消息生产者（发送 AI 响应）
+│       │   └── MqMessageListener.java    # 消息消费者（接收 AI 请求）
 │       └── rag/                          # DocumentLoader + TextSplitter + EmbeddingService
 │
 ├── my-ai-app-app/                       # 应用服务模块
 │   └── src/main/java/com/example/ai/app/
 │       ├── service/                      # ChatService / AgentService / RagService / StreamService
 │       ├── agent/                        # AgentOrchestrator + ReactAgent + workflow/
+│       ├── mq/                           # MQ 处理服务（选择 MQ 时生成）
+│       │   └── MqAIProcessingService.java # 消费消息 → AI处理 → 返回结果
 │       ├── rag/                          # IngestionPipeline + RetrievalPipeline + RetrievalAugmentor
 │       ├── tool/                         # WeatherTool / SearchTool
 │       └── prompt/                       # PromptTemplate + templates/
@@ -511,6 +610,17 @@ scaffold4j:
       type: token-window
       token-window:
         max-tokens: 4000
+    mq:
+      type: ${MQ_TYPE:rabbitmq}
+      request-queue: ai.requests
+      response-queue: ai.responses
+      consumer-group: ai-worker-group
+spring:
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
 ```
 
 ---
@@ -650,6 +760,25 @@ rm -rf ~/.m2/repository/org/springframework/ai/
 mvn clean compile
 ```
 
+### Q: 如何启用异步 MQ 处理？
+
+通过 `--mq-type` 参数指定消息队列类型，支持 RabbitMQ、RocketMQ、Kafka：
+
+```bash
+scaffold4j generate --name=ai-worker --package=com.example.ai \\
+  --mq-type=rabbitmq --llm-providers=openai
+```
+
+生成的 Worker 自动监听 `ai.requests` 队列/主题，收到消息后调用 LLM 处理，将结果回复到 `ai.responses`。三种 MQ 的实现差异：
+
+| MQ | 消费注解 | 发送方式 |
+|----|---------|---------|
+| RabbitMQ | `@RabbitListener` | `RabbitTemplate.convertAndSend()` |
+| RocketMQ | `RocketMQMessageListener` + `RocketMQListener` | `RocketMQTemplate.send()` |
+| Kafka | `@KafkaListener` | `KafkaTemplate.send()` |
+
+Docker Compose 会自动包含对应的 MQ 服务。选择 `none`（默认）则不生成任何 MQ 代码。
+
 ### Q: 最小生成的项目有多大？
 
-最小配置（`rest + openai`，无 feature）生成约 **25 个 Java 文件**，编译后 JAR 约 **20MB**。完整配置（全协议+全特性）约 **50 个 Java 文件**，编译后 JAR 约 **40MB**。
+最小配置（`rest + openai`，无 feature）生成约 **25 个 Java 文件**，编译后 JAR 约 **20MB**。完整配置（全协议+全特性+MQ）约 **55 个 Java 文件**，编译后 JAR 约 **45MB**。

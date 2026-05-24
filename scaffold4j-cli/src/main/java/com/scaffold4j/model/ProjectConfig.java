@@ -57,6 +57,15 @@ public class ProjectConfig {
     private String redisPassword;
     private int redisDatabase = 0;
 
+    // ---- Message Queue ----
+    private MqType mqType = MqType.NONE;
+    private String mqHost = "localhost";
+    private int mqPort = 0;
+    private String mqUsername = "guest";
+    private String mqPassword = "guest";
+    private String mqVirtualHost = "/";
+    private String mqGroup = "scaffold4j-consumer";
+
     // ---- Output ----
     private String outputDir = "./";
 
@@ -119,6 +128,15 @@ public class ProjectConfig {
     public boolean hasRedisCache() { return cacheType == CacheType.REDIS; }
     public boolean hasCaffeineCache() { return cacheType == CacheType.CAFFEINE; }
     public boolean hasCache() { return cacheType != CacheType.NONE; }
+
+    // ---- MQ checks ----
+    public boolean hasMq() { return mqType != MqType.NONE; }
+    public boolean isRabbitMq() { return mqType == MqType.RABBITMQ; }
+    public boolean isRocketMq() { return mqType == MqType.ROCKETMQ; }
+    public boolean isKafka() { return mqType == MqType.KAFKA; }
+    public int effectiveMqPort() {
+        return mqPort > 0 ? mqPort : mqType.defaultPort();
+    }
 
     // ---- Nacos checks ----
     public boolean hasNacosDiscovery() { return nacosDiscoveryEnabled; }
@@ -191,6 +209,13 @@ public class ProjectConfig {
     public ProjectConfig redisPort(int v) { this.redisPort = v; return this; }
     public ProjectConfig redisPassword(String v) { this.redisPassword = v; return this; }
     public ProjectConfig redisDatabase(int v) { this.redisDatabase = v; return this; }
+    public ProjectConfig mqType(MqType v) { this.mqType = v; return this; }
+    public ProjectConfig mqHost(String v) { this.mqHost = v; return this; }
+    public ProjectConfig mqPort(int v) { this.mqPort = v; return this; }
+    public ProjectConfig mqUsername(String v) { this.mqUsername = v; return this; }
+    public ProjectConfig mqPassword(String v) { this.mqPassword = v; return this; }
+    public ProjectConfig mqVirtualHost(String v) { this.mqVirtualHost = v; return this; }
+    public ProjectConfig mqGroup(String v) { this.mqGroup = v; return this; }
     public ProjectConfig outputDir(String v) { this.outputDir = v; return this; }
 
     // ---- Getters ----
@@ -225,5 +250,12 @@ public class ProjectConfig {
     public int redisPort() { return redisPort; }
     public String redisPassword() { return redisPassword; }
     public int redisDatabase() { return redisDatabase; }
+    public MqType mqType() { return mqType; }
+    public String mqHost() { return mqHost; }
+    public int mqPort() { return mqPort; }
+    public String mqUsername() { return mqUsername; }
+    public String mqPassword() { return mqPassword; }
+    public String mqVirtualHost() { return mqVirtualHost; }
+    public String mqGroup() { return mqGroup; }
     public String outputDir() { return outputDir; }
 }

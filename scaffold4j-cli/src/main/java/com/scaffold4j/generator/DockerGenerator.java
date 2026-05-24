@@ -76,6 +76,19 @@ public class DockerGenerator {
         if (config.hasNacos()) {
             sb.append("      - NACOS_ADDR=nacos:8848\n");
         }
+        if (config.hasMq()) {
+            switch (config.mqType()) {
+                case RABBITMQ:
+                    sb.append("      - RABBITMQ_HOST=rabbitmq\n");
+                    break;
+                case ROCKETMQ:
+                    sb.append("      - ROCKETMQ_NAMESRV=rocketmq:9876\n");
+                    break;
+                case KAFKA:
+                    sb.append("      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092\n");
+                    break;
+            }
+        }
 
         // depends_on section
         StringBuilder dependsOn = new StringBuilder();
@@ -87,12 +100,22 @@ public class DockerGenerator {
             dependsOn.append("        redis:\n");
             dependsOn.append("          condition: service_healthy\n");
         }
+        if (config.isRabbitMq()) {
+            dependsOn.append("        rabbitmq:\n");
+            dependsOn.append("          condition: service_healthy\n");
+        } else if (config.isKafka()) {
+            dependsOn.append("        kafka:\n");
+            dependsOn.append("          condition: service_healthy\n");
+        } else if (config.isRocketMq()) {
+            dependsOn.append("        rocketmq:\n");
+            dependsOn.append("          condition: service_started\n");
+        }
         if (!dependsOn.isEmpty()) {
             sb.append("    depends_on:\n").append(dependsOn);
         }
 
         // networks
-        boolean hasNetworks = config.hasDatabase() || config.hasRedisCache() || config.hasNacos();
+        boolean hasNetworks = config.hasDatabase() || config.hasRedisCache() || config.hasNacos() || config.hasMq();
         if (hasNetworks) {
             sb.append("    networks:\n      - app-net\n");
         }
@@ -189,6 +212,82 @@ public class DockerGenerator {
                       - "9848:9848"
                     volumes:
                       - nacos_data:/home/nacos/data
+                """);
+            if (hasNetworks) {
+                sb.append("    networks:\n      - app-net\n");
+            }
+        }
+
+        // MQ services
+        if (config.isRabbitMq()) {
+            sb.append("""
+
+                  rabbitmq:
+                    image: rabbitmq:4.0-management-alpine
+                    environment:
+                      RABBITMQ_DEFAULT_USER: """ + config.mqUsername() + """
+                      RABBITMQ_DEFAULT_PASS: """ + config.mqPassword() + """
+                    ports:
+                      - "5672:5672"
+                      - "15672:15672"
+                    volumes:
+                      - rabbitmq_data:/var/lib/rabbitmq
+                    healthcheck:
+                      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+                      interval: 10s
+                      timeout: 5s
+                      retries: 5
+                """);
+            if (hasNetworks) {
+                sb.append("    networks:\n      - app-net\n");
+            }
+        } else if (config.isRocketMq()) {
+            sb.append("""
+
+                  rocketmq:
+                    image: apache/rocketmq:5.3.0
+                    environment:
+                      JAVA_OPT_EXT: "-Xms512m -Xmx512m"
+                    ports:
+                      - "9876:9876"
+                      - "10911:10911"
+                      - "10909:10909"
+                    volumes:
+                      - rocketmq_data:/home/rocketmq
+                """);
+            if (hasNetworks) {
+                sb.append("    networks:\n      - app-net\n");
+            }
+        } else if (config.isKafka()) {
+            sb.append("""
+
+                  zookeeper:
+                    image: confluentinc/cp-zookeeper:7.6.0
+                    environment:
+                      ZOOKEEPER_CLIENT_PORT: 2181
+                      ZOOKEEPER_TICK_TIME: 2000
+                    ports:
+                      - "2181:2181"
+
+                  kafka:
+                    image: confluentinc/cp-kafka:7.6.0
+                    depends_on:
+                      - zookeeper
+                    environment:
+                      KAFKA_BROKER_ID: 1
+                      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+                      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+                      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+                      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+                    ports:
+                      - "9092:9092"
+                    volumes:
+                      - kafka_data:/var/lib/kafka/data
+                    healthcheck:
+                      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+                      interval: 10s
+                      timeout: 5s
+                      retries: 10
                 """);
             if (hasNetworks) {
                 sb.append("    networks:\n      - app-net\n");
@@ -295,6 +394,15 @@ public class DockerGenerator {
         }
         if (config.hasNacos()) {
             sb.append("  nacos_data:\n");
+        }
+        if (config.isRabbitMq()) {
+            sb.append("  rabbitmq_data:\n");
+        }
+        if (config.isRocketMq()) {
+            sb.append("  rocketmq_data:\n");
+        }
+        if (config.isKafka()) {
+            sb.append("  kafka_data:\n");
         }
 
         // networks

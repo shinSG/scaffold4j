@@ -129,6 +129,16 @@ public class ProjectGenerator {
             FileUtils.writeFile(src.resolve("entity/User.java"),
                     moduleGenerator.generateUserEntity(pkg));
         }
+
+        // MQ domain models
+        if (config.hasMq()) {
+            FileUtils.writeFile(src.resolve("mq/MqMessage.java"),
+                    moduleGenerator.generateMqMessage(pkg));
+            FileUtils.writeFile(src.resolve("mq/MqAIRequest.java"),
+                    moduleGenerator.generateMqAIRequest(pkg));
+            FileUtils.writeFile(src.resolve("mq/MqAIResponse.java"),
+                    moduleGenerator.generateMqAIResponse(pkg));
+        }
     }
 
     private void generateInfraModule() throws IOException {
@@ -216,6 +226,16 @@ public class ProjectGenerator {
             FileUtils.writeFile(src.resolve("config/CaffeineCacheConfig.java"),
                     moduleGenerator.generateCaffeineCacheConfig(pkg));
         }
+
+        // MQ infrastructure
+        if (config.hasMq()) {
+            FileUtils.writeFile(src.resolve("mq/MqConfig.java"),
+                    moduleGenerator.generateMqConfig(pkg));
+            FileUtils.writeFile(src.resolve("mq/MqMessageProducer.java"),
+                    moduleGenerator.generateMqMessageProducer(pkg));
+            FileUtils.writeFile(src.resolve("mq/MqMessageListener.java"),
+                    moduleGenerator.generateMqMessageListener(pkg));
+        }
     }
 
     private void generateAppModule() throws IOException {
@@ -287,6 +307,12 @@ public class ProjectGenerator {
         if (config.hasCache()) {
             FileUtils.writeFile(src.resolve("service/CacheService.java"),
                     moduleGenerator.generateCacheService(pkg));
+        }
+
+        // MQ processing service
+        if (config.hasMq()) {
+            FileUtils.writeFile(src.resolve("mq/MqAIProcessingService.java"),
+                    moduleGenerator.generateMqAIProcessingService(pkg));
         }
 
         FileUtils.writeFile(src.resolve("agent/AgentOrchestrator.java"),
@@ -404,6 +430,9 @@ public class ProjectGenerator {
         if (!config.features().isEmpty()) {
             sb.append("- Features: ").append(config.features().stream()
                     .map(f -> f.id()).toList()).append("\n");
+        }
+        if (config.hasMq()) {
+            sb.append("- Message Queue: ").append(config.mqType().displayName()).append("\n");
         }
         sb.append("\n## Quick Start\n\n");
         sb.append("```bash\n");
