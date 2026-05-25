@@ -51,7 +51,7 @@ call :promptDefault FEATURES "Features" ""
 
 echo.
 echo Vector stores: pgvector, milvus, chroma, pinecone, elasticsearch, redis, weaviate, qdrant, simple
-call :promptDefault VECTOR_STORE "Vector store" "pgvector"
+call :promptDefault VECTOR_STORE "Vector store" "milvus"
 call :debug "Base project options collected"
 
 echo.
@@ -68,7 +68,7 @@ if /i "%NACOS_ENABLED%"=="true" (
 
 echo.
 echo Database types: mysql, postgresql, h2
-call :promptDefault DB_TYPE "Database type" "h2"
+call :promptDefault DB_TYPE "Database type" "mysql"
 call :promptDefault ORM "ORM framework, valid: mybatis-plus or jpa" "mybatis-plus"
 set "DB_PORT_DEFAULT=0"
 if /i "%DB_TYPE%"=="mysql" set "DB_PORT_DEFAULT=3306"
