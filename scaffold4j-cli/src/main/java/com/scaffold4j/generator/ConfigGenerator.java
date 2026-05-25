@@ -353,44 +353,53 @@ public class ConfigGenerator {
     }
 
     private String generateProviderSection(LLMProvider provider) {
+        String envPrefix = envPrefix(provider);
         StringBuilder sb = new StringBuilder();
-        sb.append("""
-                          %s:
-                            api-key: ${%s}
-                    """.formatted(provider.id(),
-                        provider.envVar() != null ? provider.envVar() : provider.id().toUpperCase() + "_API_KEY"));
+        sb.append("      ").append(provider.id()).append(":\n");
+        sb.append("        api-key: ${")
+                .append(provider.envVar() != null ? provider.envVar() : envPrefix + "_API_KEY")
+                .append("}\n");
+        sb.append("        base-url: ${")
+                .append(envPrefix)
+                .append("_BASE_URL:")
+                .append(defaultBaseUrl(provider))
+                .append("}\n");
 
-        if (provider == LLMProvider.OPENAI || provider == LLMProvider.AZURE_OPENAI) {
-            sb.append("""
-                                base-url: ${%s_BASE_URL:%s}
-                    """.formatted(
-                        provider.id().toUpperCase(),
-                        provider == LLMProvider.OPENAI ? "https://api.openai.com" : "https://YOUR_RESOURCE.openai.azure.com"
-                    ));
-        } else if (provider == LLMProvider.OLLAMA) {
-            sb.append("""
-                                base-url: ${%s_BASE_URL:http://localhost:11434}
-                    """.formatted(provider.id().toUpperCase()));
+        if (provider == LLMProvider.AZURE_OPENAI) {
+            sb.append("        api-version: ${AZURE_OPENAI_API_VERSION:2024-10-21}\n");
         }
 
-        sb.append("""
-                                chat:
-                                  model: ${%s_CHAT_MODEL:%s}
-                                  temperature: 0.7
-                                  max-tokens: 4096
-                    """.formatted(
-                        provider.id().toUpperCase(),
-                        defaultModel(provider)
-                    ));
+        sb.append("        chat:\n");
+        sb.append("          model: ${").append(envPrefix).append("_CHAT_MODEL:").append(defaultModel(provider)).append("}\n");
+        sb.append("          temperature: 0.7\n");
+        sb.append("          max-tokens: 4096\n");
 
         if (provider == LLMProvider.OPENAI) {
-            sb.append("""
-                                embedding:
-                                  model: ${%s_EMBEDDING_MODEL:text-embedding-3-small}
-                    """.formatted(provider.id().toUpperCase()));
+            sb.append("        embedding:\n");
+            sb.append("          model: ${").append(envPrefix).append("_EMBEDDING_MODEL:text-embedding-3-small}\n");
         }
 
         return sb.toString();
+    }
+
+    private String envPrefix(LLMProvider provider) {
+        return provider.id().toUpperCase().replace('-', '_');
+    }
+
+    private String defaultBaseUrl(LLMProvider provider) {
+        return switch (provider) {
+            case OPENAI -> "https://api.openai.com";
+            case OLLAMA -> "http://localhost:11434";
+            case ANTHROPIC -> "https://api.anthropic.com";
+            case DEEPSEEK -> "https://api.deepseek.com";
+            case ZHIPUAI -> "https://open.bigmodel.cn/api/paas";
+            case VERTEX_AI -> "https://generativelanguage.googleapis.com/v1beta";
+            case AZURE_OPENAI -> "https://YOUR_RESOURCE.openai.azure.com";
+            case BEDROCK -> "https://bedrock-runtime.us-east-1.amazonaws.com";
+            case QWEN -> "https://dashscope.aliyuncs.com/compatible-mode";
+            case MOONSHOT -> "https://api.moonshot.cn";
+            case DOUBAO -> "https://ark.cn-beijing.volces.com/api";
+        };
     }
 
     private String defaultModel(LLMProvider provider) {
@@ -402,7 +411,7 @@ public class ConfigGenerator {
             case ZHIPUAI -> "glm-4-flash";
             case VERTEX_AI -> "gemini-2.5-flash";
             case AZURE_OPENAI -> "gpt-4o";
-            case BEDROCK -> "anthropic.claude-sonnet-4-6";
+            case BEDROCK -> "anthropic.claude-3-5-sonnet-20240620-v1:0";
             case QWEN -> "qwen-plus";
             case MOONSHOT -> "moonshot-v1-8k";
             case DOUBAO -> "doubao-lite-128k";

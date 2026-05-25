@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+JAR_FILE="$SCRIPT_DIR/scaffold4j-cli/target/scaffold4j-cli-1.0.0-SNAPSHOT.jar"
+
+# Auto-build if JAR doesn't exist or source is newer
+if [ ! -f "$JAR_FILE" ] || [ "$SCRIPT_DIR/scaffold4j-cli/src" -nt "$JAR_FILE" ]; then
+    echo ">>> Building scaffold4j..."
+    cd "$SCRIPT_DIR" && mvn -q clean package -DskipTests
+    echo
+fi
+
+exec java -jar "$JAR_FILE" "$@"

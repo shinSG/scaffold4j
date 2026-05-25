@@ -116,6 +116,8 @@ public final class InteractiveWizard {
                 cmd.mqVirtualHost(prompt(console, "RabbitMQ virtual host", cmd.mqVirtualHost() != null ? cmd.mqVirtualHost() : "/"));
             }
             cmd.mqGroup(prompt(console, "Consumer group", cmd.mqGroup() != null ? cmd.mqGroup() : "scaffold4j-consumer"));
+        } else {
+            System.out.println("MQ type is none. Skipping MQ host/port/auth settings.");
         }
 
         // 12. Output

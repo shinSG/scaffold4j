@@ -75,8 +75,8 @@ public class ProjectGenerator {
         FileUtils.writeFile(dir.resolve("pom.xml"), pomGenerator.generateModulePom(module, "common",
                 null));
 
-        String pkg = config.packagePath();
-        Path src = dir.resolve("src/main/java").resolve(pkg).resolve("common");
+        String pkg = config.basePackage();
+        Path src = dir.resolve("src/main/java").resolve(config.packagePath()).resolve("common");
 
         FileUtils.writeFile(src.resolve("constant/ErrorCode.java"),
                 moduleGenerator.generateErrorCode(pkg));
@@ -104,8 +104,8 @@ public class ProjectGenerator {
         FileUtils.writeFile(dir.resolve("pom.xml"), pomGenerator.generateModulePom(module, "domain",
                 config.moduleName("common")));
 
-        String pkg = config.packagePath();
-        Path src = dir.resolve("src/main/java").resolve(pkg).resolve("domain");
+        String pkg = config.basePackage();
+        Path src = dir.resolve("src/main/java").resolve(config.packagePath()).resolve("domain");
 
         FileUtils.writeFile(src.resolve("model/ChatMessage.java"),
                 moduleGenerator.generateChatMessage(pkg));
@@ -149,8 +149,8 @@ public class ProjectGenerator {
         FileUtils.writeFile(dir.resolve("pom.xml"), pomGenerator.generateModulePom(module, "infra",
                 config.moduleName("domain")));
 
-        String pkg = config.packagePath();
-        Path src = dir.resolve("src/main/java").resolve(pkg).resolve("infra");
+        String pkg = config.basePackage();
+        Path src = dir.resolve("src/main/java").resolve(config.packagePath()).resolve("infra");
 
         FileUtils.writeFile(src.resolve("config/AppConfig.java"),
                 moduleGenerator.generateAppConfig(pkg));
@@ -160,12 +160,14 @@ public class ProjectGenerator {
                 moduleGenerator.generateVectorStoreConfig(pkg));
         FileUtils.writeFile(src.resolve("llm/LLMProviderAdapter.java"),
                 moduleGenerator.generateLLMProviderAdapter(pkg));
+        FileUtils.writeFile(src.resolve("llm/HttpLLMProviderAdapterSupport.java"),
+                moduleGenerator.generateHttpLLMProviderAdapterSupport(pkg));
         FileUtils.writeFile(src.resolve("llm/LLMProviderFactory.java"),
                 moduleGenerator.generateLLMProviderFactory(pkg));
 
         for (var provider : config.llmProviders()) {
             FileUtils.writeFile(
-                    src.resolve("llm/" + capitalize(provider.id()) + "Adapter.java"),
+                    src.resolve("llm/" + providerAdapterClassName(provider.id()) + ".java"),
                     moduleGenerator.generateProviderAdapter(pkg, provider));
         }
 
@@ -246,8 +248,8 @@ public class ProjectGenerator {
         FileUtils.writeFile(dir.resolve("pom.xml"), pomGenerator.generateModulePom(module, "app",
                 config.moduleName("infra")));
 
-        String pkg = config.packagePath();
-        Path src = dir.resolve("src/main/java").resolve(pkg).resolve("app");
+        String pkg = config.basePackage();
+        Path src = dir.resolve("src/main/java").resolve(config.packagePath()).resolve("app");
 
         FileUtils.writeFile(src.resolve("service/ChatService.java"),
                 moduleGenerator.generateChatService(pkg));
@@ -327,8 +329,8 @@ public class ProjectGenerator {
         FileUtils.writeFile(dir.resolve("pom.xml"), pomGenerator.generateModulePom(module, "api",
                 config.moduleName("app")));
 
-        String pkg = config.packagePath();
-        Path src = dir.resolve("src/main/java").resolve(pkg).resolve("api");
+        String pkg = config.basePackage();
+        Path src = dir.resolve("src/main/java").resolve(config.packagePath()).resolve("api");
 
         FileUtils.writeFile(src.resolve("rest/ChatController.java"),
                 moduleGenerator.generateChatController(pkg));
@@ -391,8 +393,8 @@ public class ProjectGenerator {
         FileUtils.writeFile(dir.resolve("pom.xml"), pomGenerator.generateModulePom(module, "bootstrap",
                 config.moduleName("api")));
 
-        String pkg = config.packagePath();
-        Path src = dir.resolve("src/main/java").resolve(pkg);
+        String pkg = config.basePackage();
+        Path src = dir.resolve("src/main/java").resolve(config.packagePath());
         Path res = dir.resolve("src/main/resources");
 
         FileUtils.writeFile(src.resolve("Application.java"),
@@ -455,4 +457,15 @@ public class ProjectGenerator {
         if (s == null || s.isEmpty()) return s;
         return Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
+
+        private static String providerAdapterClassName(String id) {
+                if (id == null || id.isBlank()) return "ProviderAdapter";
+                StringBuilder sb = new StringBuilder();
+                for (String part : id.split("[-_]+")) {
+                        if (part.isEmpty()) continue;
+                        sb.append(Character.toUpperCase(part.charAt(0)));
+                        if (part.length() > 1) sb.append(part.substring(1));
+                }
+                return sb.append("Adapter").toString();
+        }
 }

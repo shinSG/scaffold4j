@@ -162,7 +162,7 @@ public class PomGenerator {
                         <java.version>${java.version}</java.version>
                         <maven.compiler.parameters>true</maven.compiler.parameters>
                         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-                ${aiProps()}
+                ${aiProps}
                     </properties>
 
                     <dependencyManagement>
@@ -247,6 +247,20 @@ public class PomGenerator {
 
         // Module-specific dependencies
         switch (moduleType) {
+            case "common":
+                dependencies.append("""
+                        <!-- Jackson JSON utilities -->
+                        <dependency>
+                            <groupId>com.fasterxml.jackson.core</groupId>
+                            <artifactId>jackson-databind</artifactId>
+                        </dependency>
+                        <dependency>
+                            <groupId>com.fasterxml.jackson.datatype</groupId>
+                            <artifactId>jackson-datatype-jsr310</artifactId>
+                        </dependency>
+                        """);
+                break;
+
             case "domain":
                 dependencies.append("""
                         <!-- Jakarta Validation -->
@@ -255,6 +269,16 @@ public class PomGenerator {
                             <artifactId>spring-boot-starter-validation</artifactId>
                         </dependency>
                         """);
+                if (config.usesMyBatisPlus()) {
+                    dependencies.append("""
+                            <!-- MyBatis-Plus annotations for domain entities -->
+                            <dependency>
+                                <groupId>com.baomidou</groupId>
+                                <artifactId>mybatis-plus-annotation</artifactId>
+                                <version>${mybatis-plus.version}</version>
+                            </dependency>
+                            """);
+                }
                 break;
 
             case "infra":
@@ -264,30 +288,15 @@ public class PomGenerator {
                             <groupId>org.springframework.boot</groupId>
                             <artifactId>spring-boot-starter</artifactId>
                         </dependency>
+                        <!-- WebClient + Reactor for generated LLM provider HTTP adapters -->
+                        <dependency>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-starter-webflux</artifactId>
+                        </dependency>
                         """);
 
-                // Spring AI starters for each LLM provider
-                if (config.usesSpringAI()) {
-                    for (var provider : config.llmProviders()) {
-                        if (provider.hasSpringAiSupport()) {
-                            dependencies.append("""
-                                    <dependency>
-                                        <groupId>org.springframework.ai</groupId>
-                                        <artifactId>""" + provider.springAiStarter() + """
-                                    </artifactId>
-                                    </dependency>
-                                    """);
-                        }
-                    }
-                    if (!config.llmProviders().isEmpty()) {
-                        dependencies.append("""
-                                <dependency>
-                                    <groupId>org.springframework.ai</groupId>
-                                    <artifactId>spring-ai-client-chat</artifactId>
-                                </dependency>
-                                """);
-                    }
-                }
+                // Generated LLM providers use direct WebClient HTTP adapters, so provider-specific
+                // Spring AI model starters are not required for chat completion calls.
 
                 // LangChain4j dependencies
                 if (config.usesLangChain4j()) {
@@ -408,6 +417,11 @@ public class PomGenerator {
                             <dependency>
                                 <groupId>com.baomidou</groupId>
                                 <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                            </dependency>
+                            <dependency>
+                                <groupId>com.baomidou</groupId>
+                                <artifactId>mybatis-plus-jsqlparser</artifactId>
+                                <version>${mybatis-plus.version}</version>
                             </dependency>
                             """);
                 }
@@ -643,6 +657,9 @@ public class PomGenerator {
                     </build>
                 </project>
                 """
+                .replace("${project.groupId}", config.effectiveGroupId())
+                .replace("${project.artifactId}", config.effectiveArtifactId())
+                .replace("${project.version}", config.version())
                 .replace("${module.artifactId}", moduleDirName)
                 .replace("${packaging}", packaging)
                 .replace("${deps}", dependencies.toString())

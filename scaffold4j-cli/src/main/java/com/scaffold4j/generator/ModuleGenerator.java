@@ -178,6 +178,13 @@ public class ModuleGenerator {
                         return r;
                     }
 
+                    public static Result<Void> success() {
+                        Result<Void> r = new Result<>();
+                        r.code = 0;
+                        r.message = "success";
+                        return r;
+                    }
+
                     public static <T> Result<T> error(int code, String message) {
                         Result<T> r = new Result<>();
                         r.code = code;
@@ -439,13 +446,36 @@ public class ModuleGenerator {
 
     public String generateLLMProviderType(String pkg) {
         var ids = config.llmProviders().stream()
-                .map(p -> p.name())
+                .map(p -> p.name() + "(\"" + p.id() + "\")")
                 .collect(java.util.stream.Collectors.joining(", "));
         return """
                 package %s.domain.enums;
 
                 public enum LLMProviderType {
-                    %s
+                    %s;
+
+                    private final String id;
+
+                    LLMProviderType(String id) {
+                        this.id = id;
+                    }
+
+                    public String id() {
+                        return id;
+                    }
+
+                    public static LLMProviderType fromId(String id) {
+                        if (id == null || id.isBlank()) {
+                            throw new IllegalArgumentException("LLM provider id must not be blank");
+                        }
+                        String normalized = id.trim().replace('-', '_');
+                        for (LLMProviderType type : values()) {
+                            if (type.id.equalsIgnoreCase(id) || type.name().equalsIgnoreCase(normalized)) {
+                                return type;
+                            }
+                        }
+                        throw new IllegalArgumentException("Unsupported LLM provider: " + id);
+                    }
                 }
                 """.formatted(pkg, ids);
     }
@@ -471,18 +501,24 @@ public class ModuleGenerator {
                 package %s.infra.config;
 
                 import %s.infra.llm.LLMProviderFactory;
+                import %s.infra.llm.LLMProviderAdapter;
+                import org.springframework.beans.factory.annotation.Value;
                 import org.springframework.context.annotation.Bean;
                 import org.springframework.context.annotation.Configuration;
+
+                import java.util.List;
 
                 @Configuration
                 public class LLMProviderConfig {
 
                     @Bean
-                    public LLMProviderFactory llmProviderFactory() {
-                        return new LLMProviderFactory();
+                    public LLMProviderFactory llmProviderFactory(
+                            List<LLMProviderAdapter> adapters,
+                            @Value("${scaffold4j.ai.default-provider:%s}") String defaultProvider) {
+                        return new LLMProviderFactory(adapters, defaultProvider);
                     }
                 }
-                """.formatted(pkg, pkg);
+                """.formatted(pkg, pkg, pkg, config.llmProviders().iterator().next().id());
     }
 
     public String generateVectorStoreConfig(String pkg) {
@@ -542,6 +578,7 @@ public class ModuleGenerator {
                 package %s.infra.llm;
 
                 import %s.domain.enums.LLMProviderType;
+                import java.util.List;
                 import java.util.Map;
                 import java.util.concurrent.ConcurrentHashMap;
 
@@ -554,6 +591,14 @@ public class ModuleGenerator {
                 public class LLMProviderFactory {
 
                     private final Map<LLMProviderType, LLMProviderAdapter> adapters = new ConcurrentHashMap<>();
+                    private final LLMProviderType defaultProvider;
+
+                    public LLMProviderFactory(List<LLMProviderAdapter> adapters, String defaultProvider) {
+                        this.defaultProvider = LLMProviderType.fromId(defaultProvider);
+                        for (LLMProviderAdapter adapter : adapters) {
+                            register(LLMProviderType.fromId(adapter.providerName()), adapter);
+                        }
+                    }
 
                     public void register(LLMProviderType type, LLMProviderAdapter adapter) {
                         adapters.put(type, adapter);
@@ -568,43 +613,353 @@ public class ModuleGenerator {
                     }
 
                     public LLMProviderAdapter getDefaultAdapter() {
-                        return adapters.values().iterator().next();
+                        LLMProviderAdapter adapter = adapters.get(defaultProvider);
+                        if (adapter != null) {
+                            return adapter;
+                        }
+                        return adapters.values().stream().findFirst()
+                                .orElseThrow(() -> new IllegalStateException("No LLM adapters registered"));
                     }
                 }
                 """.formatted(pkg, pkg, aiFramework);
     }
 
-    public String generateProviderAdapter(String pkg, LLMProvider provider) {
-        String className = capitalize(provider.id()) + "Adapter";
+    public String generateHttpLLMProviderAdapterSupport(String pkg) {
         return """
                 package %s.infra.llm;
 
-                import %s.infra.llm.LLMProviderAdapter;
                 import %s.domain.model.ChatMessage;
+                import com.fasterxml.jackson.databind.JsonNode;
+                import com.fasterxml.jackson.databind.ObjectMapper;
+                import org.springframework.http.HttpHeaders;
+                import org.springframework.http.HttpStatusCode;
+                import org.springframework.http.MediaType;
+                import org.springframework.web.reactive.function.client.WebClient;
+                import reactor.core.publisher.Flux;
+
+                import java.util.ArrayList;
+                import java.util.HashMap;
+                import java.util.List;
+                import java.util.Map;
+                import java.util.function.Consumer;
+
+                /**
+                 * Shared HTTP implementation for generated LLM providers.
+                 */
+                public abstract class HttpLLMProviderAdapterSupport implements LLMProviderAdapter {
+
+                    protected final WebClient webClient;
+                    protected final ObjectMapper objectMapper = new ObjectMapper();
+
+                    protected HttpLLMProviderAdapterSupport(WebClient.Builder webClientBuilder, String baseUrl) {
+                        this.webClient = webClientBuilder.baseUrl(trimTrailingSlash(baseUrl)).build();
+                    }
+
+                    protected String openAiCompatibleChat(String apiKey, String model, double temperature, int maxTokens,
+                                                          String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        JsonNode json = postJson("/v1/chat/completions", bearer(apiKey), openAiBody(model, temperature, maxTokens, false, systemPrompt, history, userMessage));
+                        JsonNode content = json.at("/choices/0/message/content");
+                        if (content.isMissingNode()) {
+                            throw new IllegalStateException("LLM response did not contain choices[0].message.content: " + json);
+                        }
+                        return content.asText();
+                    }
+
+                    protected Flux<String> openAiCompatibleStream(String apiKey, String model, double temperature, int maxTokens,
+                                                                  String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        return postStream("/v1/chat/completions", bearer(apiKey), openAiBody(model, temperature, maxTokens, true, systemPrompt, history, userMessage))
+                                .flatMapIterable(this::extractOpenAiStreamContent);
+                    }
+
+                    protected String azureOpenAiChat(String apiKey, String apiVersion, String deployment, double temperature, int maxTokens,
+                                                     String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        String path = "/openai/deployments/" + deployment + "/chat/completions?api-version=" + apiVersion;
+                        JsonNode json = postJson(path, headers -> headers.set("api-key", apiKey), openAiBody(deployment, temperature, maxTokens, false, systemPrompt, history, userMessage));
+                        JsonNode content = json.at("/choices/0/message/content");
+                        if (content.isMissingNode()) {
+                            throw new IllegalStateException("Azure OpenAI response did not contain choices[0].message.content: " + json);
+                        }
+                        return content.asText();
+                    }
+
+                    protected Flux<String> azureOpenAiStream(String apiKey, String apiVersion, String deployment, double temperature, int maxTokens,
+                                                             String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        String path = "/openai/deployments/" + deployment + "/chat/completions?api-version=" + apiVersion;
+                        return postStream(path, headers -> headers.set("api-key", apiKey), openAiBody(deployment, temperature, maxTokens, true, systemPrompt, history, userMessage))
+                                .flatMapIterable(this::extractOpenAiStreamContent);
+                    }
+
+                    protected String anthropicChat(String apiKey, String model, double temperature, int maxTokens,
+                                                   String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        Map<String, Object> body = new HashMap<>();
+                        body.put("model", model);
+                        body.put("system", nullToEmpty(systemPrompt));
+                        body.put("temperature", temperature);
+                        body.put("max_tokens", maxTokens);
+                        body.put("messages", anthropicMessages(history, userMessage));
+                        JsonNode json = postJson("/v1/messages", headers -> {
+                            headers.set("x-api-key", apiKey);
+                            headers.set("anthropic-version", "2023-06-01");
+                        }, body);
+                        JsonNode content = json.at("/content/0/text");
+                        if (content.isMissingNode()) {
+                            throw new IllegalStateException("Anthropic response did not contain content[0].text: " + json);
+                        }
+                        return content.asText();
+                    }
+
+                    protected String ollamaChat(String model, String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        Map<String, Object> body = new HashMap<>();
+                        body.put("model", model);
+                        body.put("stream", false);
+                        body.put("messages", openAiMessages(systemPrompt, history, userMessage));
+                        JsonNode json = postJson("/api/chat", headers -> {}, body);
+                        JsonNode content = json.at("/message/content");
+                        if (content.isMissingNode()) {
+                            throw new IllegalStateException("Ollama response did not contain message.content: " + json);
+                        }
+                        return content.asText();
+                    }
+
+                    protected Flux<String> ollamaStream(String model, String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        Map<String, Object> body = new HashMap<>();
+                        body.put("model", model);
+                        body.put("stream", true);
+                        body.put("messages", openAiMessages(systemPrompt, history, userMessage));
+                        return postStream("/api/chat", headers -> {}, body).map(this::extractOllamaStreamContent).filter(s -> !s.isBlank());
+                    }
+
+                    protected String geminiChat(String apiKey, String model, double temperature, int maxTokens,
+                                                String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        Map<String, Object> generationConfig = new HashMap<>();
+                        generationConfig.put("temperature", temperature);
+                        generationConfig.put("maxOutputTokens", maxTokens);
+                        Map<String, Object> body = new HashMap<>();
+                        body.put("systemInstruction", Map.of("parts", List.of(Map.of("text", nullToEmpty(systemPrompt)))));
+                        body.put("contents", geminiContents(history, userMessage));
+                        body.put("generationConfig", generationConfig);
+                        JsonNode json = postJson("/models/" + model + ":generateContent?key=" + apiKey, headers -> {}, body);
+                        JsonNode content = json.at("/candidates/0/content/parts/0/text");
+                        if (content.isMissingNode()) {
+                            throw new IllegalStateException("Gemini response did not contain candidates[0].content.parts[0].text: " + json);
+                        }
+                        return content.asText();
+                    }
+
+                    protected String bedrockConverseChat(String apiKey, String model, double temperature, int maxTokens,
+                                                         String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        Map<String, Object> body = new HashMap<>();
+                        body.put("system", List.of(Map.of("text", nullToEmpty(systemPrompt))));
+                        body.put("messages", bedrockMessages(history, userMessage));
+                        body.put("inferenceConfig", Map.of("temperature", temperature, "maxTokens", maxTokens));
+                        JsonNode json = postJson("/model/" + model + "/converse", bearer(apiKey), body);
+                        JsonNode content = json.at("/output/message/content/0/text");
+                        if (content.isMissingNode()) {
+                            throw new IllegalStateException("Bedrock Converse response did not contain output.message.content[0].text: " + json);
+                        }
+                        return content.asText();
+                    }
+
+                    private JsonNode postJson(String path, Consumer<HttpHeaders> headersCustomizer, Map<String, Object> body) {
+                        return webClient.post()
+                                .uri(path)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .headers(headersCustomizer)
+                                .bodyValue(body)
+                                .retrieve()
+                                .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
+                                        .map(error -> new IllegalStateException("LLM provider request failed: " + error)))
+                                .bodyToMono(JsonNode.class)
+                                .block();
+                    }
+
+                    private Flux<String> postStream(String path, Consumer<HttpHeaders> headersCustomizer, Map<String, Object> body) {
+                        return webClient.post()
+                                .uri(path)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_NDJSON, MediaType.APPLICATION_JSON)
+                                .headers(headersCustomizer)
+                                .bodyValue(body)
+                                .retrieve()
+                                .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
+                                        .map(error -> new IllegalStateException("LLM provider stream request failed: " + error)))
+                                .bodyToFlux(String.class);
+                    }
+
+                    private Map<String, Object> openAiBody(String model, double temperature, int maxTokens, boolean stream,
+                                                           String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        Map<String, Object> body = new HashMap<>();
+                        body.put("model", model);
+                        body.put("temperature", temperature);
+                        body.put("max_tokens", maxTokens);
+                        body.put("stream", stream);
+                        body.put("messages", openAiMessages(systemPrompt, history, userMessage));
+                        return body;
+                    }
+
+                    private List<Map<String, String>> openAiMessages(String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        List<Map<String, String>> messages = new ArrayList<>();
+                        if (systemPrompt != null && !systemPrompt.isBlank()) {
+                            messages.add(Map.of("role", "system", "content", systemPrompt));
+                        }
+                        if (history != null) {
+                            for (ChatMessage message : history) {
+                                if (message.getRole() != null && message.getContent() != null && !message.getContent().isBlank()) {
+                                    messages.add(Map.of("role", message.getRole().name().toLowerCase(), "content", message.getContent()));
+                                }
+                            }
+                        }
+                        messages.add(Map.of("role", "user", "content", nullToEmpty(userMessage)));
+                        return messages;
+                    }
+
+                    private List<Map<String, String>> anthropicMessages(List<ChatMessage> history, String userMessage) {
+                        List<Map<String, String>> messages = new ArrayList<>();
+                        if (history != null) {
+                            for (ChatMessage message : history) {
+                                if (message.getRole() != null && message.getContent() != null && !message.getContent().isBlank()) {
+                                    String role = "assistant".equalsIgnoreCase(message.getRole().name()) ? "assistant" : "user";
+                                    messages.add(Map.of("role", role, "content", message.getContent()));
+                                }
+                            }
+                        }
+                        messages.add(Map.of("role", "user", "content", nullToEmpty(userMessage)));
+                        return messages;
+                    }
+
+                    private List<Map<String, Object>> geminiContents(List<ChatMessage> history, String userMessage) {
+                        List<Map<String, Object>> contents = new ArrayList<>();
+                        if (history != null) {
+                            for (ChatMessage message : history) {
+                                if (message.getRole() != null && message.getContent() != null && !message.getContent().isBlank()) {
+                                    String role = "assistant".equalsIgnoreCase(message.getRole().name()) ? "model" : "user";
+                                    contents.add(Map.of("role", role, "parts", List.of(Map.of("text", message.getContent()))));
+                                }
+                            }
+                        }
+                        contents.add(Map.of("role", "user", "parts", List.of(Map.of("text", nullToEmpty(userMessage)))));
+                        return contents;
+                    }
+
+                    private List<Map<String, Object>> bedrockMessages(List<ChatMessage> history, String userMessage) {
+                        List<Map<String, Object>> messages = new ArrayList<>();
+                        if (history != null) {
+                            for (ChatMessage message : history) {
+                                if (message.getRole() != null && message.getContent() != null && !message.getContent().isBlank()) {
+                                    String role = "assistant".equalsIgnoreCase(message.getRole().name()) ? "assistant" : "user";
+                                    messages.add(Map.of("role", role, "content", List.of(Map.of("text", message.getContent()))));
+                                }
+                            }
+                        }
+                        messages.add(Map.of("role", "user", "content", List.of(Map.of("text", nullToEmpty(userMessage)))));
+                        return messages;
+                    }
+
+                    private Consumer<HttpHeaders> bearer(String apiKey) {
+                        return headers -> headers.setBearerAuth(apiKey == null ? "" : apiKey);
+                    }
+
+                    private List<String> extractOpenAiStreamContent(String chunk) {
+                        List<String> result = new ArrayList<>();
+                        for (String line : chunk.split("\\n")) {
+                            String data = line.strip();
+                            if (data.startsWith("data:")) {
+                                data = data.substring(5).trim();
+                            }
+                            if (data.isBlank() || "[DONE]".equals(data)) {
+                                continue;
+                            }
+                            try {
+                                JsonNode json = objectMapper.readTree(data);
+                                JsonNode content = json.at("/choices/0/delta/content");
+                                if (!content.isMissingNode()) {
+                                    result.add(content.asText());
+                                }
+                            } catch (Exception ignored) {
+                                // Ignore keep-alive or partial stream chunks.
+                            }
+                        }
+                        return result;
+                    }
+
+                    private String extractOllamaStreamContent(String chunk) {
+                        try {
+                            JsonNode json = objectMapper.readTree(chunk);
+                            return json.at("/message/content").asText("");
+                        } catch (Exception ignored) {
+                            return "";
+                        }
+                    }
+
+                    private static String nullToEmpty(String value) {
+                        return value == null ? "" : value;
+                    }
+
+                    private static String trimTrailingSlash(String value) {
+                        if (value == null || value.isBlank()) return "";
+                        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+                    }
+                }
+                """.formatted(pkg, pkg);
+    }
+
+    public String generateProviderAdapter(String pkg, LLMProvider provider) {
+        String className = providerAdapterClassName(provider.id());
+        String defaultBaseUrl = defaultBaseUrl(provider);
+        String defaultModel = defaultModel(provider);
+        String chatMethod = chatMethod(provider);
+        String streamMethod = streamMethod(provider);
+        String extraFields = provider == LLMProvider.AZURE_OPENAI ? "\n    private final String apiVersion;" : "";
+        String extraConstructorArg = provider == LLMProvider.AZURE_OPENAI
+                ? ",\n            @Value(\"${scaffold4j.ai.providers." + provider.id() + ".api-version:2024-10-21}\") String apiVersion"
+                : "";
+        String extraAssignment = provider == LLMProvider.AZURE_OPENAI ? "\n        this.apiVersion = apiVersion;" : "";
+        return """
+                package %s.infra.llm;
+
+                import %s.domain.model.ChatMessage;
+                import org.springframework.beans.factory.annotation.Value;
                 import org.springframework.stereotype.Component;
+                import org.springframework.web.reactive.function.client.WebClient;
                 import reactor.core.publisher.Flux;
 
                 import java.util.List;
 
                 @Component
-                public class %s implements LLMProviderAdapter {
+                public class %s extends HttpLLMProviderAdapterSupport {
+
+                    private final String apiKey;
+                    private final String model;
+                    private final double temperature;
+                    private final int maxTokens;%s
+
+                    public %s(
+                            WebClient.Builder webClientBuilder,
+                            @Value("${scaffold4j.ai.providers.%s.base-url:%s}") String baseUrl,
+                            @Value("${scaffold4j.ai.providers.%s.api-key:}") String apiKey,
+                            @Value("${scaffold4j.ai.providers.%s.chat.model:%s}") String model,
+                            @Value("${scaffold4j.ai.providers.%s.chat.temperature:0.7}") double temperature,
+                            @Value("${scaffold4j.ai.providers.%s.chat.max-tokens:4096}") int maxTokens%s) {
+                        super(webClientBuilder, baseUrl);
+                        this.apiKey = apiKey;
+                        this.model = model;
+                        this.temperature = temperature;
+                        this.maxTokens = maxTokens;%s
+                    }
 
                     @Override
                     public String chat(String systemPrompt, String userMessage) {
-                        // TODO: Implement %s chat using Spring AI ChatClient or LangChain4j ChatLanguageModel
-                        throw new UnsupportedOperationException("%s adapter not yet configured. Set env: %s");
+                        return chatWithHistory(systemPrompt, List.of(), userMessage);
                     }
 
                     @Override
                     public Flux<String> chatStream(String systemPrompt, String userMessage) {
-                        // TODO: Implement streaming chat
-                        throw new UnsupportedOperationException("Streaming not yet configured for %s");
+                        %s
                     }
 
                     @Override
                     public String chatWithHistory(String systemPrompt, List<ChatMessage> history, String userMessage) {
-                        // TODO: Implement chat with conversation history
-                        throw new UnsupportedOperationException("History chat not yet configured for %s");
+                        %s
                     }
 
                     @Override
@@ -612,10 +967,13 @@ public class ModuleGenerator {
                         return "%s";
                     }
                 }
-                """.formatted(pkg, pkg, pkg, className,
-                        provider.displayName(), provider.displayName(),
-                        provider.envVar() != null ? provider.envVar() : "N/A",
-                        provider.id(), provider.id(), provider.id());
+                """.formatted(pkg, pkg, className, extraFields, className,
+                        provider.id(), defaultBaseUrl,
+                        provider.id(),
+                        provider.id(), defaultModel,
+                        provider.id(),
+                        provider.id(), extraConstructorArg, extraAssignment,
+                        streamMethod, chatMethod, provider.id());
     }
 
     public String generateChatMemoryStore(String pkg) {
@@ -889,7 +1247,7 @@ public class ModuleGenerator {
 
                     private LLMProviderAdapter resolveAdapter(String provider) {
                         if (provider != null && !provider.isBlank()) {
-                            return factory.getAdapter(LLMProviderType.valueOf(provider.toUpperCase()));
+                            return factory.getAdapter(LLMProviderType.fromId(provider));
                         }
                         return factory.getDefaultAdapter();
                     }
@@ -2998,5 +3356,68 @@ public class ModuleGenerator {
     private static String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
         return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    private static String providerAdapterClassName(String id) {
+        if (id == null || id.isBlank()) return "ProviderAdapter";
+        StringBuilder sb = new StringBuilder();
+        for (String part : id.split("[-_]+")) {
+            if (part.isEmpty()) continue;
+            sb.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) sb.append(part.substring(1));
+        }
+        return sb.append("Adapter").toString();
+    }
+
+    private static String defaultBaseUrl(LLMProvider provider) {
+        return switch (provider) {
+            case OPENAI -> "https://api.openai.com";
+            case OLLAMA -> "http://localhost:11434";
+            case ANTHROPIC -> "https://api.anthropic.com";
+            case DEEPSEEK -> "https://api.deepseek.com";
+            case ZHIPUAI -> "https://open.bigmodel.cn/api/paas";
+            case VERTEX_AI -> "https://generativelanguage.googleapis.com/v1beta";
+            case AZURE_OPENAI -> "https://YOUR_RESOURCE.openai.azure.com";
+            case BEDROCK -> "https://bedrock-runtime.us-east-1.amazonaws.com";
+            case QWEN -> "https://dashscope.aliyuncs.com/compatible-mode";
+            case MOONSHOT -> "https://api.moonshot.cn";
+            case DOUBAO -> "https://ark.cn-beijing.volces.com/api";
+        };
+    }
+
+    private static String defaultModel(LLMProvider provider) {
+        return switch (provider) {
+            case OPENAI -> "gpt-4o";
+            case ANTHROPIC -> "claude-sonnet-4-6";
+            case OLLAMA -> "llama3.1";
+            case DEEPSEEK -> "deepseek-chat";
+            case ZHIPUAI -> "glm-4-flash";
+            case VERTEX_AI -> "gemini-2.5-flash";
+            case AZURE_OPENAI -> "gpt-4o";
+            case BEDROCK -> "anthropic.claude-3-5-sonnet-20240620-v1:0";
+            case QWEN -> "qwen-plus";
+            case MOONSHOT -> "moonshot-v1-8k";
+            case DOUBAO -> "doubao-lite-128k";
+        };
+    }
+
+    private static String chatMethod(LLMProvider provider) {
+        return switch (provider) {
+            case OLLAMA -> "return ollamaChat(model, systemPrompt, history, userMessage);";
+            case ANTHROPIC -> "return anthropicChat(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
+            case AZURE_OPENAI -> "return azureOpenAiChat(apiKey, apiVersion, model, temperature, maxTokens, systemPrompt, history, userMessage);";
+            case VERTEX_AI -> "return geminiChat(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
+            case BEDROCK -> "return bedrockConverseChat(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
+            default -> "return openAiCompatibleChat(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
+        };
+    }
+
+    private static String streamMethod(LLMProvider provider) {
+        return switch (provider) {
+            case OLLAMA -> "return ollamaStream(model, systemPrompt, List.of(), userMessage);";
+            case AZURE_OPENAI -> "return azureOpenAiStream(apiKey, apiVersion, model, temperature, maxTokens, systemPrompt, List.of(), userMessage);";
+            case OPENAI, DEEPSEEK, ZHIPUAI, QWEN, MOONSHOT, DOUBAO -> "return openAiCompatibleStream(apiKey, model, temperature, maxTokens, systemPrompt, List.of(), userMessage);";
+            default -> "return Flux.just(chat(systemPrompt, userMessage));";
+        };
     }
 }

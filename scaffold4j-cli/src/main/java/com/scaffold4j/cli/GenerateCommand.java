@@ -149,7 +149,7 @@ public class GenerateCommand implements Callable<Integer> {
 
     @Option(names = {"--mq-type"},
             description = "Message queue type. Valid values: rabbitmq, rocketmq, kafka, none. Default: none")
-    private String mqType;
+    private String mqType = "none";
 
     @Option(names = {"--mq-host"},
             description = "MQ server host. Default: localhost")
@@ -270,8 +270,8 @@ public class GenerateCommand implements Callable<Integer> {
                 .version(version)
                 .javaVersion(javaVersion)
                 .springBootVersion(springBootVersion)
-                .aiFramework(AIFramework.fromId(aiFramework))
-                .vectorStore(VectorStore.fromId(vectorStore))
+                .aiFramework(AIFramework.fromId(defaultIfBlank(aiFramework, "spring-ai")))
+                .vectorStore(VectorStore.fromId(defaultIfBlank(vectorStore, "pgvector")))
                 .nacosDiscoveryEnabled(discovery)
                 .nacosConfigEnabled(config)
                 .nacosAddr(nacosAddr)
@@ -279,8 +279,8 @@ public class GenerateCommand implements Callable<Integer> {
                 .outputDir(outputDir);
 
         // Parse comma-separated values into typed sets
-        cfg.protocols(parseSet(protocols, Protocol::fromId));
-        cfg.llmProviders(parseSet(llmProviders, LLMProvider::fromId));
+        cfg.protocols(parseSet(defaultIfBlank(protocols, "rest"), Protocol::fromId));
+        cfg.llmProviders(parseSet(defaultIfBlank(llmProviders, "openai"), LLMProvider::fromId));
         cfg.features(parseSet(features, Feature::fromId));
 
         // Database configuration
@@ -305,19 +305,25 @@ public class GenerateCommand implements Callable<Integer> {
         if (redisPassword != null && !redisPassword.isBlank()) cfg.redisPassword(redisPassword);
         if (redisDatabase != null) cfg.redisDatabase(redisDatabase);
 
-        // MQ configuration
-        if (mqType != null && !mqType.isBlank()) {
-            cfg.mqType(MqType.fromId(mqType));
+                // MQ configuration. When mq-type is none, ignore all MQ connection fields so
+                // callers and wizards do not need to provide MQ host/port/auth settings.
+                MqType selectedMqType = MqType.fromId(defaultIfBlank(mqType, "none"));
+                cfg.mqType(selectedMqType);
+                if (selectedMqType != MqType.NONE) {
+                        cfg.mqHost(mqHost);
+                        if (mqPort != null) cfg.mqPort(mqPort);
+                        if (mqUsername != null && !mqUsername.isBlank()) cfg.mqUsername(mqUsername);
+                        if (mqPassword != null && !mqPassword.isBlank()) cfg.mqPassword(mqPassword);
+                        if (mqVirtualHost != null && !mqVirtualHost.isBlank()) cfg.mqVirtualHost(mqVirtualHost);
+                        if (mqGroup != null && !mqGroup.isBlank()) cfg.mqGroup(mqGroup);
         }
-        cfg.mqHost(mqHost);
-        if (mqPort != null) cfg.mqPort(mqPort);
-        if (mqUsername != null && !mqUsername.isBlank()) cfg.mqUsername(mqUsername);
-        if (mqPassword != null && !mqPassword.isBlank()) cfg.mqPassword(mqPassword);
-        if (mqVirtualHost != null && !mqVirtualHost.isBlank()) cfg.mqVirtualHost(mqVirtualHost);
-        if (mqGroup != null && !mqGroup.isBlank()) cfg.mqGroup(mqGroup);
 
         return cfg;
     }
+
+        private String defaultIfBlank(String value, String defaultValue) {
+                return (value == null || value.isBlank()) ? defaultValue : value;
+        }
 
     @FunctionalInterface
     private interface Parser<T> {

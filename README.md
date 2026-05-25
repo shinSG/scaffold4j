@@ -31,6 +31,23 @@ mvn clean package -DskipTests
 alias scaffold4j="java -jar $(pwd)/scaffold4j-cli/target/scaffold4j-cli-1.0.0-SNAPSHOT.jar"
 ```
 
+Windows 下可直接使用仓库根目录的引导脚本：
+
+```bat
+REM 可视化初始化向导（推荐 Windows 用户使用）
+init-project-gui.cmd
+
+REM 交互式初始化一个新项目
+init-project.cmd
+
+REM 或作为 CLI 包装器使用，JAR 不存在时会自动构建
+scaffold4j.cmd generate --name=my-ai-app --package=com.example.ai --protocols=rest
+```
+
+`init-project-gui.cmd` 会启动 PowerShell Windows Forms 界面，支持在窗口中选择 AI 框架、LLM Provider、协议、特性、数据库、缓存、MQ、Nacos 等选项，并在日志区展示生成过程。
+
+Windows 脚本会在检测到 Maven 时自动构建/更新 CLI；如果未安装 Maven，但已存在 `scaffold4j-cli/target/scaffold4j-cli-1.0.0-SNAPSHOT.jar`，则会直接使用该 JAR 运行。
+
 ### 使用
 
 #### 最小化生成
