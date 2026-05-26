@@ -5,6 +5,7 @@ chcp 65001 >nul
 
 set "SCRIPT_DIR=%~dp0"
 set "JAR_FILE=%SCRIPT_DIR%scaffold4j-cli\target\scaffold4j-cli-1.0.0-SNAPSHOT.jar"
+set "DEFAULT_OUTPUT_DIR=%USERPROFILE%\scaffold4j-projects"
 if not defined S4J_DEBUG set "S4J_DEBUG=0"
 
 echo.
@@ -26,7 +27,7 @@ call :promptDefault BASE_PACKAGE "Base package" "com.example.ai"
 call :promptDefault GROUP_ID "Maven groupId" "%BASE_PACKAGE%"
 call :promptDefault ARTIFACT_ID "Maven artifactId" "%PROJECT_NAME%"
 call :promptDefault VERSION "Version" "1.0.0-SNAPSHOT"
-call :promptDefault OUTPUT_DIR "Output directory" "."
+call :promptDefault OUTPUT_DIR "Output directory" "%DEFAULT_OUTPUT_DIR%"
 
 echo.
 echo Build options
@@ -101,6 +102,7 @@ if "%ORM%"=="" set "ORM=mybatis-plus"
 echo.
 echo Generating project...
 echo.
+call :prepareOutputDirectory "%OUTPUT_DIR%" || exit /b 1
 call :debug "Generating project with direct CLI arguments"
 
 if /i "%MQ_TYPE%"=="none" (
@@ -112,6 +114,7 @@ set "EXIT_CODE=%errorlevel%"
 call :debug "Generation finished with exit code %EXIT_CODE%"
 echo.
 if "%EXIT_CODE%"=="0" (
+    call :grantCurrentUserFullControl "%OUTPUT_DIR%\%ARTIFACT_ID%"
     echo Done. Next steps:
     echo   cd "%OUTPUT_DIR%\%ARTIFACT_ID%"
     echo   mvnw.cmd -pl %ARTIFACT_ID%-bootstrap spring-boot:run
@@ -119,6 +122,31 @@ if "%EXIT_CODE%"=="0" (
     echo Generation failed with exit code %EXIT_CODE%.
 )
 exit /b %EXIT_CODE%
+
+:prepareOutputDirectory
+set "__path=%~f1"
+if not exist "%__path%" (
+    mkdir "%__path%" 2>nul
+    if errorlevel 1 (
+        echo [ERROR] Failed to create output directory: %__path%
+        echo Please choose a user-writable directory such as %%USERPROFILE%%\scaffold4j-projects.
+        exit /b 1
+    )
+)
+call :grantCurrentUserFullControl "%__path%"
+exit /b 0
+
+:grantCurrentUserFullControl
+set "__path=%~f1"
+if not exist "%__path%" exit /b 0
+attrib -R "%__path%\*" /S /D >nul 2>nul
+where icacls >nul 2>nul
+if errorlevel 1 exit /b 0
+set "__current_user="
+for /f "delims=" %%U in ('whoami 2^>nul') do set "__current_user=%%U"
+if not defined __current_user exit /b 0
+icacls "%__path%" /inheritance:e /grant:r "%__current_user%:(OI)(CI)F" /T /C >nul 2>nul
+exit /b 0
 
 :checkJava
 where java >nul 2>nul

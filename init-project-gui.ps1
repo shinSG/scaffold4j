@@ -12,6 +12,7 @@ Add-Type -AssemblyName System.Drawing
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $JarFile = Join-Path $ScriptDir 'scaffold4j-cli\target\scaffold4j-cli-1.0.0-SNAPSHOT.jar'
+$DefaultOutputDir = Join-Path $env:USERPROFILE 'scaffold4j-projects'
 
 function ConvertTo-CommandLineArgument {
     param([string]$Value)
@@ -119,6 +120,34 @@ function Run-ExternalProcess {
     return $process.ExitCode
 }
 
+function Grant-CurrentUserFullControl {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) { return }
+    try {
+        & attrib -R (Join-Path $Path '*') /S /D 2>$null | Out-Null
+        $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        & icacls $Path /inheritance:e /grant:r "${identity}:(OI)(CI)F" /T /C 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Append-Log "已修复目录权限，当前用户可删除：$Path"
+        } else {
+            Append-Log "WARN: 无法自动修复目录权限：$Path"
+        }
+    } catch {
+        Append-Log ("WARN: 无法自动修复目录权限：" + $_.Exception.Message)
+    }
+}
+
+function Ensure-OutputDirectoryAccess {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw '请输入输出目录。' }
+    if (-not (Test-Path $Path)) {
+        New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    }
+    Grant-CurrentUserFullControl $Path
+}
+
 function Ensure-CliJar {
     if (-not (Get-Command mvn -ErrorAction SilentlyContinue)) {
         if (Test-Path $JarFile) {
@@ -198,6 +227,7 @@ function Generate-Project {
     $openOutputButton.Enabled = $false
     try {
         if (-not (Ensure-CliJar)) { return }
+        Ensure-OutputDirectoryAccess $outputDirBox.Text.Trim()
 
         $dbPort = if ([string]::IsNullOrWhiteSpace($dbPortBox.Text)) { '0' } else { $dbPortBox.Text.Trim() }
         $redisPassword = if ($null -eq $redisPasswordBox.Text) { '' } else { $redisPasswordBox.Text }
@@ -253,6 +283,7 @@ function Generate-Project {
         $exitCode = Run-ExternalProcess 'java' $args.ToArray()
         if ($exitCode -eq 0) {
             $lastOutputPath = Join-Path $outputDirBox.Text.Trim() $artifactIdBox.Text.Trim()
+            Grant-CurrentUserFullControl $lastOutputPath
             $openOutputButton.Tag = $lastOutputPath
             $openOutputButton.Enabled = $true
             Append-Log "生成完成：$lastOutputPath"
@@ -309,7 +340,7 @@ $basicTab.Controls.Add((New-Label '版本' 24 122))
 $versionBox = New-TextBox '1.0.0-SNAPSHOT' 160 122 260
 $basicTab.Controls.Add($versionBox)
 $basicTab.Controls.Add((New-Label '输出目录' 480 122))
-$outputDirBox = New-TextBox '.' 620 122 200
+$outputDirBox = New-TextBox $DefaultOutputDir 620 122 200
 $basicTab.Controls.Add($outputDirBox)
 $browseButton = New-Object System.Windows.Forms.Button
 $browseButton.Text = '浏览...'
