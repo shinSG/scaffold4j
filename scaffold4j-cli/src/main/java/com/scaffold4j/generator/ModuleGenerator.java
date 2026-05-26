@@ -551,14 +551,14 @@ public class ModuleGenerator {
                  */
                 public interface LLMProviderAdapter {
 
-                    /** Synchronous chat completion. */
-                    String chat(String systemPrompt, String userMessage);
+                    /** Synchronous LLM invocation. */
+                    String invoke(String systemPrompt, String userMessage);
 
-                    /** Streaming chat completion via reactive streams. */
-                    Flux<String> chatStream(String systemPrompt, String userMessage);
+                    /** Streaming LLM invocation via reactive streams. */
+                    Flux<String> invokeStream(String systemPrompt, String userMessage);
 
-                    /** Chat with full conversation history. */
-                    String chatWithHistory(String systemPrompt, List<ChatMessage> history, String userMessage);
+                    /** LLM invocation with full conversation history. */
+                    String invokeWithHistory(String systemPrompt, List<ChatMessage> history, String userMessage);
 
                     /** Provider identifier. */
                     String providerName();
@@ -655,8 +655,8 @@ public class ModuleGenerator {
                         this.webClient = webClientBuilder.baseUrl(trimTrailingSlash(baseUrl)).build();
                     }
 
-                    protected String openAiCompatibleChat(String apiKey, String model, double temperature, int maxTokens,
-                                                          String systemPrompt, List<ChatMessage> history, String userMessage) {
+                    protected String openAiCompatibleInvoke(String apiKey, String model, double temperature, int maxTokens,
+                                                            String systemPrompt, List<ChatMessage> history, String userMessage) {
                         JsonNode json = postJson("/v1/chat/completions", bearer(apiKey), openAiBody(model, temperature, maxTokens, false, systemPrompt, history, userMessage));
                         JsonNode content = json.at("/choices/0/message/content");
                         if (content.isMissingNode()) {
@@ -671,8 +671,8 @@ public class ModuleGenerator {
                                 .flatMapIterable(this::extractOpenAiStreamContent);
                     }
 
-                    protected String azureOpenAiChat(String apiKey, String apiVersion, String deployment, double temperature, int maxTokens,
-                                                     String systemPrompt, List<ChatMessage> history, String userMessage) {
+                    protected String azureOpenAiInvoke(String apiKey, String apiVersion, String deployment, double temperature, int maxTokens,
+                                                       String systemPrompt, List<ChatMessage> history, String userMessage) {
                         String path = "/openai/deployments/" + deployment + "/chat/completions?api-version=" + apiVersion;
                         JsonNode json = postJson(path, headers -> headers.set("api-key", apiKey), openAiBody(deployment, temperature, maxTokens, false, systemPrompt, history, userMessage));
                         JsonNode content = json.at("/choices/0/message/content");
@@ -689,8 +689,8 @@ public class ModuleGenerator {
                                 .flatMapIterable(this::extractOpenAiStreamContent);
                     }
 
-                    protected String anthropicChat(String apiKey, String model, double temperature, int maxTokens,
-                                                   String systemPrompt, List<ChatMessage> history, String userMessage) {
+                    protected String anthropicInvoke(String apiKey, String model, double temperature, int maxTokens,
+                                                     String systemPrompt, List<ChatMessage> history, String userMessage) {
                         Map<String, Object> body = new HashMap<>();
                         body.put("model", model);
                         body.put("system", nullToEmpty(systemPrompt));
@@ -708,7 +708,7 @@ public class ModuleGenerator {
                         return content.asText();
                     }
 
-                    protected String ollamaChat(String model, String systemPrompt, List<ChatMessage> history, String userMessage) {
+                    protected String ollamaInvoke(String model, String systemPrompt, List<ChatMessage> history, String userMessage) {
                         Map<String, Object> body = new HashMap<>();
                         body.put("model", model);
                         body.put("stream", false);
@@ -729,8 +729,8 @@ public class ModuleGenerator {
                         return postStream("/api/chat", headers -> {}, body).map(this::extractOllamaStreamContent).filter(s -> !s.isBlank());
                     }
 
-                    protected String geminiChat(String apiKey, String model, double temperature, int maxTokens,
-                                                String systemPrompt, List<ChatMessage> history, String userMessage) {
+                    protected String geminiInvoke(String apiKey, String model, double temperature, int maxTokens,
+                                                  String systemPrompt, List<ChatMessage> history, String userMessage) {
                         Map<String, Object> generationConfig = new HashMap<>();
                         generationConfig.put("temperature", temperature);
                         generationConfig.put("maxOutputTokens", maxTokens);
@@ -746,8 +746,8 @@ public class ModuleGenerator {
                         return content.asText();
                     }
 
-                    protected String bedrockConverseChat(String apiKey, String model, double temperature, int maxTokens,
-                                                         String systemPrompt, List<ChatMessage> history, String userMessage) {
+                    protected String bedrockConverseInvoke(String apiKey, String model, double temperature, int maxTokens,
+                                                           String systemPrompt, List<ChatMessage> history, String userMessage) {
                         Map<String, Object> body = new HashMap<>();
                         body.put("system", List.of(Map.of("text", nullToEmpty(systemPrompt))));
                         body.put("messages", bedrockMessages(history, userMessage));
@@ -928,12 +928,12 @@ public class ModuleGenerator {
                     }
 
                     @Override
-                    public String chat(String systemPrompt, String userMessage) {
-                        return chatWithHistory(systemPrompt, List.of(), userMessage);
+                    public String invoke(String systemPrompt, String userMessage) {
+                        return invokeWithHistory(systemPrompt, List.of(), userMessage);
                     }
 
                     @Override
-                    public Flux<String> chatStream(String systemPrompt, String userMessage) {
+                    public Flux<String> invokeStream(String systemPrompt, String userMessage) {
                         return chatClient.prompt()
                                 .system(nullToEmpty(systemPrompt))
                                 .user(userMessage)
@@ -942,7 +942,7 @@ public class ModuleGenerator {
                     }
 
                     @Override
-                    public String chatWithHistory(String systemPrompt, List<ChatMessage> history, String userMessage) {
+                    public String invokeWithHistory(String systemPrompt, List<ChatMessage> history, String userMessage) {
                         return chatClient.prompt()
                                 .system(nullToEmpty(systemPrompt))
                                 .user(toUserPrompt(history, userMessage))
@@ -990,18 +990,18 @@ public class ModuleGenerator {
                     protected abstract ChatLanguageModel chatModel();
 
                     @Override
-                    public String chat(String systemPrompt, String userMessage) {
-                        return chatWithHistory(systemPrompt, List.of(), userMessage);
+                    public String invoke(String systemPrompt, String userMessage) {
+                        return invokeWithHistory(systemPrompt, List.of(), userMessage);
                     }
 
                     @Override
-                    public Flux<String> chatStream(String systemPrompt, String userMessage) {
+                    public Flux<String> invokeStream(String systemPrompt, String userMessage) {
                         // Provider streaming model APIs differ by integration; expose a safe reactive wrapper.
-                        return Flux.just(chat(systemPrompt, userMessage));
+                        return Flux.just(invoke(systemPrompt, userMessage));
                     }
 
                     @Override
-                    public String chatWithHistory(String systemPrompt, List<ChatMessage> history, String userMessage) {
+                    public String invokeWithHistory(String systemPrompt, List<ChatMessage> history, String userMessage) {
                         return chatModel().chat(toPrompt(systemPrompt, history, userMessage));
                     }
 
@@ -1111,7 +1111,7 @@ public class ModuleGenerator {
         String className = providerAdapterClassName(provider.id());
         String defaultBaseUrl = defaultBaseUrl(provider);
         String defaultModel = defaultModel(provider);
-        String chatMethod = chatMethod(provider);
+        String invokeMethod = invokeMethod(provider);
         String streamMethod = streamMethod(provider);
         String extraFields = provider == LLMProvider.AZURE_OPENAI ? "\n    private final String apiVersion;" : "";
         String extraConstructorArg = provider == LLMProvider.AZURE_OPENAI
@@ -1152,17 +1152,17 @@ public class ModuleGenerator {
                     }
 
                     @Override
-                    public String chat(String systemPrompt, String userMessage) {
-                        return chatWithHistory(systemPrompt, List.of(), userMessage);
+                    public String invoke(String systemPrompt, String userMessage) {
+                        return invokeWithHistory(systemPrompt, List.of(), userMessage);
                     }
 
                     @Override
-                    public Flux<String> chatStream(String systemPrompt, String userMessage) {
+                    public Flux<String> invokeStream(String systemPrompt, String userMessage) {
                         %s
                     }
 
                     @Override
-                    public String chatWithHistory(String systemPrompt, List<ChatMessage> history, String userMessage) {
+                    public String invokeWithHistory(String systemPrompt, List<ChatMessage> history, String userMessage) {
                         %s
                     }
 
@@ -1177,7 +1177,7 @@ public class ModuleGenerator {
                         provider.id(), defaultModel,
                         provider.id(),
                         provider.id(), extraConstructorArg, extraAssignment,
-                        streamMethod, chatMethod, provider.id());
+                        streamMethod, invokeMethod, provider.id());
     }
 
     public String generateChatMemoryStore(String pkg) {
@@ -1432,7 +1432,7 @@ public class ModuleGenerator {
 
                     public ChatResponse chat(ChatRequest request) {
                         LLMProviderAdapter adapter = resolveAdapter(request.getProvider());
-                        String response = adapter.chat(
+                        String response = adapter.invoke(
                                 "You are a helpful AI assistant.",
                                 request.getMessage());
                         ChatResponse cr = new ChatResponse();
@@ -1444,7 +1444,7 @@ public class ModuleGenerator {
 
                     public Flux<String> streamChat(ChatRequest request) {
                         LLMProviderAdapter adapter = resolveAdapter(request.getProvider());
-                        return adapter.chatStream(
+                        return adapter.invokeStream(
                                 "You are a helpful AI assistant.",
                                 request.getMessage());
                     }
@@ -1768,7 +1768,7 @@ public class ModuleGenerator {
                         // 3. Observation: process tool result
                         // 4. Repeat until final answer
                         var adapter = factory.getDefaultAdapter();
-                        return adapter.chat("You are a helpful agent with access to tools.", task);
+                        return adapter.invoke("You are a helpful agent with access to tools.", task);
                     }
                 }
                 """.formatted(pkg, pkg, pkg);
@@ -3674,14 +3674,14 @@ public class ModuleGenerator {
                                         .build()""".formatted(className);
     }
 
-    private static String chatMethod(LLMProvider provider) {
+    private static String invokeMethod(LLMProvider provider) {
         return switch (provider) {
-            case OLLAMA -> "return ollamaChat(model, systemPrompt, history, userMessage);";
-            case ANTHROPIC -> "return anthropicChat(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
-            case AZURE_OPENAI -> "return azureOpenAiChat(apiKey, apiVersion, model, temperature, maxTokens, systemPrompt, history, userMessage);";
-            case VERTEX_AI -> "return geminiChat(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
-            case BEDROCK -> "return bedrockConverseChat(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
-            default -> "return openAiCompatibleChat(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
+            case OLLAMA -> "return ollamaInvoke(model, systemPrompt, history, userMessage);";
+            case ANTHROPIC -> "return anthropicInvoke(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
+            case AZURE_OPENAI -> "return azureOpenAiInvoke(apiKey, apiVersion, model, temperature, maxTokens, systemPrompt, history, userMessage);";
+            case VERTEX_AI -> "return geminiInvoke(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
+            case BEDROCK -> "return bedrockConverseInvoke(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
+            default -> "return openAiCompatibleInvoke(apiKey, model, temperature, maxTokens, systemPrompt, history, userMessage);";
         };
     }
 
@@ -3690,7 +3690,7 @@ public class ModuleGenerator {
             case OLLAMA -> "return ollamaStream(model, systemPrompt, List.of(), userMessage);";
             case AZURE_OPENAI -> "return azureOpenAiStream(apiKey, apiVersion, model, temperature, maxTokens, systemPrompt, List.of(), userMessage);";
             case OPENAI, DEEPSEEK, ZHIPUAI, QWEN, MOONSHOT, DOUBAO -> "return openAiCompatibleStream(apiKey, model, temperature, maxTokens, systemPrompt, List.of(), userMessage);";
-            default -> "return Flux.just(chat(systemPrompt, userMessage));";
+            default -> "return Flux.just(invoke(systemPrompt, userMessage));";
         };
     }
 }
