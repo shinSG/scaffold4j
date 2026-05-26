@@ -101,53 +101,14 @@ if "%ORM%"=="" set "ORM=mybatis-plus"
 echo.
 echo Generating project...
 echo.
-call :debug "Generating project with argument file"
+call :debug "Generating project with direct CLI arguments"
 
-set "ARGS_FILE=%TEMP%\scaffold4j-%RANDOM%-%RANDOM%.args"
-if exist "%ARGS_FILE%" del /f /q "%ARGS_FILE%" >nul 2>nul
->> "%ARGS_FILE%" echo(generate
-call :writeOption --name "%PROJECT_NAME%"
-call :writeOption --package "%BASE_PACKAGE%"
-call :writeOption --group-id "%GROUP_ID%"
-call :writeOption --artifact-id "%ARTIFACT_ID%"
-call :writeOption --version "%VERSION%"
-call :writeOption --java-version "%JAVA_VERSION%"
-call :writeOption --spring-boot-version "%SPRING_BOOT_VERSION%"
-call :writeOption --ai-framework "%AI_FRAMEWORK%"
-call :writeOption --llm-providers "%LLM_PROVIDERS%"
-call :writeOption --protocols "%PROTOCOLS%"
-call :writeOptionIfNotBlank --features "%FEATURES%"
-call :writeOption --vector-store "%VECTOR_STORE%"
-if /i "%NACOS_ENABLED%"=="true" call :writeFlag --nacos
-call :writeOption --nacos-addr "%NACOS_ADDR%"
-call :writeOptionIfNotBlank --nacos-namespace "%NACOS_NAMESPACE%"
-call :writeOption --db-type "%DB_TYPE%"
-call :writeOption --db-host "%DB_HOST%"
-call :writeOption --db-port "%DB_PORT%"
-call :writeOption --db-name "%DB_NAME%"
-call :writeOption --db-username "%DB_USERNAME%"
-call :writeOption --db-password "%DB_PASSWORD%"
-call :writeOption --orm "%ORM%"
-call :writeOption --cache-type "%CACHE_TYPE%"
-call :writeOption --redis-host "%REDIS_HOST%"
-call :writeOption --redis-port "%REDIS_PORT%"
-call :writeOptionIfNotBlank --redis-password "%REDIS_PASSWORD%"
-call :writeOption --redis-database "%REDIS_DATABASE%"
-call :writeOption --mq-type "%MQ_TYPE%"
-if /i not "%MQ_TYPE%"=="none" (
-    call :writeOption --mq-host "%MQ_HOST%"
-    call :writeOption --mq-port "%MQ_PORT%"
-    call :writeOption --mq-username "%MQ_USERNAME%"
-    call :writeOption --mq-password "%MQ_PASSWORD%"
-    call :writeOption --mq-virtual-host "%MQ_VIRTUAL_HOST%"
-    call :writeOption --mq-group "%MQ_GROUP%"
+if /i "%MQ_TYPE%"=="none" (
+    java -jar "%JAR_FILE%" generate --name "%PROJECT_NAME%" --package "%BASE_PACKAGE%" --group-id "%GROUP_ID%" --artifact-id "%ARTIFACT_ID%" --version "%VERSION%" --java-version "%JAVA_VERSION%" --spring-boot-version "%SPRING_BOOT_VERSION%" --ai-framework "%AI_FRAMEWORK%" --llm-providers "%LLM_PROVIDERS%" --protocols "%PROTOCOLS%" --features "%FEATURES%" --vector-store "%VECTOR_STORE%" %NACOS_FLAG% --nacos-addr "%NACOS_ADDR%" --nacos-namespace "%NACOS_NAMESPACE%" --db-type "%DB_TYPE%" --db-host "%DB_HOST%" --db-port "%DB_PORT%" --db-name "%DB_NAME%" --db-username "%DB_USERNAME%" --db-password "%DB_PASSWORD%" --orm "%ORM%" --cache-type "%CACHE_TYPE%" --redis-host "%REDIS_HOST%" --redis-port "%REDIS_PORT%" --redis-password "%REDIS_PASSWORD%" --redis-database "%REDIS_DATABASE%" --mq-type "%MQ_TYPE%" --output-dir "%OUTPUT_DIR%"
+) else (
+    java -jar "%JAR_FILE%" generate --name "%PROJECT_NAME%" --package "%BASE_PACKAGE%" --group-id "%GROUP_ID%" --artifact-id "%ARTIFACT_ID%" --version "%VERSION%" --java-version "%JAVA_VERSION%" --spring-boot-version "%SPRING_BOOT_VERSION%" --ai-framework "%AI_FRAMEWORK%" --llm-providers "%LLM_PROVIDERS%" --protocols "%PROTOCOLS%" --features "%FEATURES%" --vector-store "%VECTOR_STORE%" %NACOS_FLAG% --nacos-addr "%NACOS_ADDR%" --nacos-namespace "%NACOS_NAMESPACE%" --db-type "%DB_TYPE%" --db-host "%DB_HOST%" --db-port "%DB_PORT%" --db-name "%DB_NAME%" --db-username "%DB_USERNAME%" --db-password "%DB_PASSWORD%" --orm "%ORM%" --cache-type "%CACHE_TYPE%" --redis-host "%REDIS_HOST%" --redis-port "%REDIS_PORT%" --redis-password "%REDIS_PASSWORD%" --redis-database "%REDIS_DATABASE%" --mq-type "%MQ_TYPE%" --mq-host "%MQ_HOST%" --mq-port "%MQ_PORT%" --mq-username "%MQ_USERNAME%" --mq-password "%MQ_PASSWORD%" --mq-virtual-host "%MQ_VIRTUAL_HOST%" --mq-group "%MQ_GROUP%" --output-dir "%OUTPUT_DIR%"
 )
-call :writeOption --output-dir "%OUTPUT_DIR%"
-
-java -jar "%JAR_FILE%" @"%ARGS_FILE%"
-
 set "EXIT_CODE=%errorlevel%"
-if exist "%ARGS_FILE%" del /f /q "%ARGS_FILE%" >nul 2>nul
 call :debug "Generation finished with exit code %EXIT_CODE%"
 echo.
 if "%EXIT_CODE%"=="0" (
@@ -273,19 +234,4 @@ exit /b 0
 :debug
 if /i not "%S4J_DEBUG%"=="1" exit /b 0
 echo [DEBUG] %~1
-exit /b 0
-
-:writeOption
->> "%ARGS_FILE%" echo(%~1
->> "%ARGS_FILE%" echo("%~2"
-exit /b 0
-
-:writeOptionIfNotBlank
-if "%~2"=="" exit /b 0
->> "%ARGS_FILE%" echo(%~1
->> "%ARGS_FILE%" echo("%~2"
-exit /b 0
-
-:writeFlag
->> "%ARGS_FILE%" echo(%~1
 exit /b 0

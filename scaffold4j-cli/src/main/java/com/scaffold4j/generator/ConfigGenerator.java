@@ -30,6 +30,7 @@ public class ConfigGenerator {
                     name: %s
                   profiles:
                     active: ${SPRING_PROFILES_ACTIVE:dev}
+                %s
 
                 server:
                   port: ${SERVER_PORT:8080}
@@ -45,6 +46,7 @@ public class ConfigGenerator {
                 .formatted(
                     config.effectiveArtifactId(),
                     config.effectiveArtifactId(),
+                    generateSpringAiProviderProperties(),
                     config.llmProviders().iterator().next().id(),
                     config.aiFramework().name()
                 ));
@@ -380,6 +382,79 @@ public class ConfigGenerator {
         }
 
         return sb.toString();
+    }
+
+    private String generateSpringAiProviderProperties() {
+        if (!config.usesSpringAI()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("  ai:\n");
+        for (LLMProvider provider : config.llmProviders()) {
+            if (!provider.hasSpringAiSupport()) {
+                continue;
+            }
+            sb.append(generateSpringAiProviderSection(provider));
+        }
+        return sb.toString();
+    }
+
+    private String generateSpringAiProviderSection(LLMProvider provider) {
+        String envPrefix = envPrefix(provider);
+        String baseUrl = defaultBaseUrl(provider);
+        String model = defaultModel(provider);
+        return switch (provider) {
+            case OPENAI -> """
+                    openai:
+                      api-key: ${OPENAI_API_KEY}
+                      base-url: ${OPENAI_BASE_URL:%s}
+                      chat:
+                        options:
+                          model: ${OPENAI_CHAT_MODEL:%s}
+                          temperature: 0.7
+                          max-tokens: 4096
+                """.formatted(baseUrl, model);
+            case OLLAMA -> """
+                    ollama:
+                      base-url: ${OLLAMA_BASE_URL:%s}
+                      chat:
+                        options:
+                          model: ${OLLAMA_CHAT_MODEL:%s}
+                          temperature: 0.7
+                """.formatted(baseUrl, model);
+            case ANTHROPIC -> """
+                    anthropic:
+                      api-key: ${ANTHROPIC_API_KEY}
+                      base-url: ${ANTHROPIC_BASE_URL:%s}
+                      chat:
+                        options:
+                          model: ${ANTHROPIC_CHAT_MODEL:%s}
+                          temperature: 0.7
+                          max-tokens: 4096
+                """.formatted(baseUrl, model);
+            case AZURE_OPENAI -> """
+                    azure:
+                      openai:
+                        api-key: ${AZURE_OPENAI_API_KEY}
+                        endpoint: ${AZURE_OPENAI_BASE_URL:%s}
+                        chat:
+                          options:
+                            deployment-name: ${AZURE_OPENAI_CHAT_MODEL:%s}
+                            temperature: 0.7
+                            max-tokens: 4096
+                """.formatted(baseUrl, model);
+            default -> """
+                    %s:
+                      api-key: ${%s}
+                      base-url: ${%s_BASE_URL:%s}
+                      chat:
+                        options:
+                          model: ${%s_CHAT_MODEL:%s}
+                          temperature: 0.7
+                          max-tokens: 4096
+                """.formatted(provider.id(), provider.envVar() != null ? provider.envVar() : envPrefix + "_API_KEY",
+                    envPrefix, baseUrl, envPrefix, model);
+        };
     }
 
     private String envPrefix(LLMProvider provider) {

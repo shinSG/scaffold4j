@@ -288,15 +288,27 @@ public class PomGenerator {
                             <groupId>org.springframework.boot</groupId>
                             <artifactId>spring-boot-starter</artifactId>
                         </dependency>
-                        <!-- WebClient + Reactor for generated LLM provider HTTP adapters -->
+                        <!-- Reactor/WebFlux support for streaming chat responses -->
                         <dependency>
                             <groupId>org.springframework.boot</groupId>
                             <artifactId>spring-boot-starter-webflux</artifactId>
                         </dependency>
                         """);
 
-                // Generated LLM providers use direct WebClient HTTP adapters, so provider-specific
-                // Spring AI model starters are not required for chat completion calls.
+                // Spring AI dependencies
+                if (config.usesSpringAI()) {
+                    for (var provider : config.llmProviders()) {
+                        if (provider.hasSpringAiSupport()) {
+                            dependencies.append("""
+                                    <dependency>
+                                        <groupId>org.springframework.ai</groupId>
+                                        <artifactId>""" + provider.springAiStarter() + """
+                                    </artifactId>
+                                    </dependency>
+                                    """);
+                        }
+                    }
+                }
 
                 // LangChain4j dependencies
                 if (config.usesLangChain4j()) {

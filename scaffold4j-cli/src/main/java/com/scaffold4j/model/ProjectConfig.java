@@ -172,6 +172,18 @@ public class ProjectConfig {
         if (hasFeature(Feature.RAG) && !usesSpringAI() && !usesLangChain4j()) {
             throw new IllegalArgumentException("RAG requires at least one AI framework to be selected.");
         }
+        for (LLMProvider provider : llmProviders) {
+            if (usesSpringAI() && !usesLangChain4j() && !provider.hasSpringAiSupport()) {
+                throw new IllegalArgumentException("Provider " + provider.id() + " does not have Spring AI support.");
+            }
+            if (usesLangChain4j() && !usesSpringAI() && !provider.hasLangchain4jSupport()) {
+                throw new IllegalArgumentException("Provider " + provider.id() + " does not have LangChain4j support.");
+            }
+            if (usesSpringAI() && usesLangChain4j()
+                    && !provider.hasSpringAiSupport() && !provider.hasLangchain4jSupport()) {
+                throw new IllegalArgumentException("Provider " + provider.id() + " does not have Spring AI or LangChain4j support.");
+            }
+        }
     }
 
     // ---- Fluent setters ----

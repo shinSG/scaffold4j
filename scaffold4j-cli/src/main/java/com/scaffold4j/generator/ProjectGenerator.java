@@ -160,8 +160,13 @@ public class ProjectGenerator {
                 moduleGenerator.generateVectorStoreConfig(pkg));
         FileUtils.writeFile(src.resolve("llm/LLMProviderAdapter.java"),
                 moduleGenerator.generateLLMProviderAdapter(pkg));
-        FileUtils.writeFile(src.resolve("llm/HttpLLMProviderAdapterSupport.java"),
-                moduleGenerator.generateHttpLLMProviderAdapterSupport(pkg));
+        if (config.usesLangChain4j() && !config.usesSpringAI()) {
+            FileUtils.writeFile(src.resolve("llm/LangChain4jLLMProviderAdapterSupport.java"),
+                    moduleGenerator.generateLangChain4jLLMProviderAdapterSupport(pkg));
+        } else {
+            FileUtils.writeFile(src.resolve("llm/SpringAiLLMProviderAdapterSupport.java"),
+                    moduleGenerator.generateSpringAiLLMProviderAdapterSupport(pkg));
+        }
         FileUtils.writeFile(src.resolve("llm/LLMProviderFactory.java"),
                 moduleGenerator.generateLLMProviderFactory(pkg));
 

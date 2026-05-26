@@ -903,7 +903,211 @@ public class ModuleGenerator {
                 """.formatted(pkg, pkg);
     }
 
+    public String generateSpringAiLLMProviderAdapterSupport(String pkg) {
+        return """
+                package %s.infra.llm;
+
+                import %s.domain.model.ChatMessage;
+                import org.springframework.ai.chat.client.ChatClient;
+                import reactor.core.publisher.Flux;
+
+                import java.util.List;
+
+                /**
+                 * Spring AI based implementation shared by generated provider adapters.
+                 *
+                 * The actual model provider is created by Spring AI auto-configuration from
+                 * spring.ai.* properties and provider starters on the classpath.
+                 */
+                public abstract class SpringAiLLMProviderAdapterSupport implements LLMProviderAdapter {
+
+                    private final ChatClient chatClient;
+
+                    protected SpringAiLLMProviderAdapterSupport(ChatClient.Builder chatClientBuilder) {
+                        this.chatClient = chatClientBuilder.build();
+                    }
+
+                    @Override
+                    public String chat(String systemPrompt, String userMessage) {
+                        return chatWithHistory(systemPrompt, List.of(), userMessage);
+                    }
+
+                    @Override
+                    public Flux<String> chatStream(String systemPrompt, String userMessage) {
+                        return chatClient.prompt()
+                                .system(nullToEmpty(systemPrompt))
+                                .user(userMessage)
+                                .stream()
+                                .content();
+                    }
+
+                    @Override
+                    public String chatWithHistory(String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        return chatClient.prompt()
+                                .system(nullToEmpty(systemPrompt))
+                                .user(toUserPrompt(history, userMessage))
+                                .call()
+                                .content();
+                    }
+
+                    private String toUserPrompt(List<ChatMessage> history, String userMessage) {
+                        StringBuilder prompt = new StringBuilder();
+                        if (history != null && !history.isEmpty()) {
+                            prompt.append("Conversation history:\\n");
+                            for (ChatMessage message : history) {
+                                if (message != null && message.getRole() != null && message.getContent() != null) {
+                                    prompt.append(message.getRole().name()).append(": ").append(message.getContent()).append('\\n');
+                                }
+                            }
+                            prompt.append("\\nCurrent user message:\\n");
+                        }
+                        prompt.append(nullToEmpty(userMessage));
+                        return prompt.toString();
+                    }
+
+                    private String nullToEmpty(String value) {
+                        return value == null ? "" : value;
+                    }
+                }
+                """.formatted(pkg, pkg);
+    }
+
+    public String generateLangChain4jLLMProviderAdapterSupport(String pkg) {
+        return """
+                package %s.infra.llm;
+
+                import %s.domain.model.ChatMessage;
+                import dev.langchain4j.model.chat.ChatLanguageModel;
+                import reactor.core.publisher.Flux;
+
+                import java.util.List;
+
+                /**
+                 * LangChain4j based implementation shared by generated provider adapters.
+                 */
+                public abstract class LangChain4jLLMProviderAdapterSupport implements LLMProviderAdapter {
+
+                    protected abstract ChatLanguageModel chatModel();
+
+                    @Override
+                    public String chat(String systemPrompt, String userMessage) {
+                        return chatWithHistory(systemPrompt, List.of(), userMessage);
+                    }
+
+                    @Override
+                    public Flux<String> chatStream(String systemPrompt, String userMessage) {
+                        // Provider streaming model APIs differ by integration; expose a safe reactive wrapper.
+                        return Flux.just(chat(systemPrompt, userMessage));
+                    }
+
+                    @Override
+                    public String chatWithHistory(String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        return chatModel().chat(toPrompt(systemPrompt, history, userMessage));
+                    }
+
+                    private String toPrompt(String systemPrompt, List<ChatMessage> history, String userMessage) {
+                        StringBuilder prompt = new StringBuilder();
+                        if (systemPrompt != null && !systemPrompt.isBlank()) {
+                            prompt.append("System: ").append(systemPrompt).append("\\n\\n");
+                        }
+                        if (history != null && !history.isEmpty()) {
+                            prompt.append("Conversation history:\\n");
+                            for (ChatMessage message : history) {
+                                if (message != null && message.getRole() != null && message.getContent() != null) {
+                                    prompt.append(message.getRole().name()).append(": ").append(message.getContent()).append('\\n');
+                                }
+                            }
+                            prompt.append('\\n');
+                        }
+                        prompt.append("User: ").append(userMessage == null ? "" : userMessage);
+                        return prompt.toString();
+                    }
+                }
+                """.formatted(pkg, pkg);
+    }
+
     public String generateProviderAdapter(String pkg, LLMProvider provider) {
+        if (config.usesLangChain4j() && !config.usesSpringAI()) {
+            return generateLangChain4jProviderAdapter(pkg, provider);
+        }
+        return generateSpringAiProviderAdapter(pkg, provider);
+    }
+
+    private String generateSpringAiProviderAdapter(String pkg, LLMProvider provider) {
+        String className = providerAdapterClassName(provider.id());
+        return """
+                package %s.infra.llm;
+
+                import org.springframework.ai.chat.client.ChatClient;
+                import org.springframework.stereotype.Component;
+
+                /**
+                 * Provider adapter backed by Spring AI ChatClient.
+                 */
+                @Component
+                public class %s extends SpringAiLLMProviderAdapterSupport {
+
+                    public %s(ChatClient.Builder chatClientBuilder) {
+                        super(chatClientBuilder);
+                    }
+
+                    @Override
+                    public String providerName() {
+                        return "%s";
+                    }
+                }
+                """.formatted(pkg, className, className, provider.id());
+    }
+
+    private String generateLangChain4jProviderAdapter(String pkg, LLMProvider provider) {
+        String className = providerAdapterClassName(provider.id());
+        String modelClass = langChain4jModelClass(provider);
+        String builder = langChain4jBuilder(provider);
+        return """
+                package %s.infra.llm;
+
+                import dev.langchain4j.model.chat.ChatLanguageModel;
+                import %s;
+                import org.springframework.beans.factory.annotation.Value;
+                import org.springframework.stereotype.Component;
+
+                /**
+                 * Provider adapter backed by the native LangChain4j provider integration.
+                 */
+                @Component
+                public class %s extends LangChain4jLLMProviderAdapterSupport {
+
+                    private final ChatLanguageModel chatModel;
+
+                    public %s(
+                            @Value("${scaffold4j.ai.providers.%s.base-url:%s}") String baseUrl,
+                            @Value("${scaffold4j.ai.providers.%s.api-key:}") String apiKey,
+                            @Value("${scaffold4j.ai.providers.%s.chat.model:%s}") String model,
+                            @Value("${scaffold4j.ai.providers.%s.chat.temperature:0.7}") double temperature,
+                            @Value("${scaffold4j.ai.providers.%s.chat.max-tokens:4096}") int maxTokens) {
+                        this.chatModel = %s;
+                    }
+
+                    @Override
+                    protected ChatLanguageModel chatModel() {
+                        return chatModel;
+                    }
+
+                    @Override
+                    public String providerName() {
+                        return "%s";
+                    }
+                }
+                """.formatted(pkg, modelClass, className, className,
+                        provider.id(), defaultBaseUrl(provider),
+                        provider.id(),
+                        provider.id(), defaultModel(provider),
+                        provider.id(),
+                        provider.id(), builder,
+                        provider.id());
+    }
+
+    public String generateLegacyHttpProviderAdapter(String pkg, LLMProvider provider) {
         String className = providerAdapterClassName(provider.id());
         String defaultBaseUrl = defaultBaseUrl(provider);
         String defaultModel = defaultModel(provider);
@@ -3399,6 +3603,75 @@ public class ModuleGenerator {
             case MOONSHOT -> "moonshot-v1-8k";
             case DOUBAO -> "doubao-lite-128k";
         };
+    }
+
+    private static String langChain4jModelClass(LLMProvider provider) {
+        return switch (provider) {
+            case OPENAI -> "dev.langchain4j.model.openai.OpenAiChatModel";
+            case OLLAMA -> "dev.langchain4j.model.ollama.OllamaChatModel";
+            case ANTHROPIC -> "dev.langchain4j.model.anthropic.AnthropicChatModel";
+            case DEEPSEEK -> "dev.langchain4j.model.deepseek.DeepSeekChatModel";
+            case AZURE_OPENAI -> "dev.langchain4j.model.azure.AzureOpenAiChatModel";
+            case VERTEX_AI -> "dev.langchain4j.model.vertexai.gemini.VertexAiGeminiChatModel";
+            case BEDROCK -> "dev.langchain4j.model.bedrock.BedrockChatModel";
+            default -> throw new IllegalArgumentException("Provider " + provider.id() + " does not have LangChain4j support.");
+        };
+    }
+
+    private static String langChain4jBuilder(LLMProvider provider) {
+        return switch (provider) {
+            case OLLAMA -> """
+                    OllamaChatModel.builder()
+                                            .baseUrl(baseUrl)
+                                            .modelName(model)
+                                            .temperature(temperature)
+                                            .build()""";
+            case ANTHROPIC -> """
+                    AnthropicChatModel.builder()
+                                            .apiKey(apiKey)
+                                            .modelName(model)
+                                            .temperature(temperature)
+                                            .maxTokens(maxTokens)
+                                            .build()""";
+            case AZURE_OPENAI -> """
+                    AzureOpenAiChatModel.builder()
+                                            .endpoint(baseUrl)
+                                            .apiKey(apiKey)
+                                            .deploymentName(model)
+                                            .temperature(temperature)
+                                            .maxTokens(maxTokens)
+                                            .build()""";
+            case VERTEX_AI -> """
+                    VertexAiGeminiChatModel.builder()
+                                            .modelName(model)
+                                            .temperature(temperature)
+                                            .maxOutputTokens(maxTokens)
+                                            .build()""";
+            case BEDROCK -> """
+                    BedrockChatModel.builder()
+                                            .modelId(model)
+                                            .temperature(temperature)
+                                            .maxTokens(maxTokens)
+                                            .build()""";
+            case OPENAI, DEEPSEEK -> langChain4jOpenAiCompatibleBuilder(provider);
+            default -> throw new IllegalArgumentException("Provider " + provider.id() + " does not have LangChain4j support.");
+        };
+    }
+
+    private static String langChain4jOpenAiCompatibleBuilder(LLMProvider provider) {
+        String className = switch (provider) {
+            case OPENAI -> "OpenAiChatModel";
+            case DEEPSEEK -> "DeepSeekChatModel";
+            default -> throw new IllegalArgumentException("Provider " + provider.id() + " is not OpenAI-compatible in LangChain4j.");
+        };
+        return """
+                %s.builder()
+                                        .apiKey(apiKey)
+                                        .baseUrl(baseUrl)
+                                        .modelName(model)
+                                        .temperature(temperature)
+                                        .maxTokens(maxTokens)
+                                        .build()""".formatted(className);
     }
 
     private static String chatMethod(LLMProvider provider) {
