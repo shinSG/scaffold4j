@@ -341,6 +341,8 @@ public class ProjectGenerator {
                 moduleGenerator.generateChatController(pkg));
         FileUtils.writeFile(src.resolve("rest/AgentController.java"),
                 moduleGenerator.generateAgentController(pkg));
+        FileUtils.writeFile(src.resolve("exception/GlobalExceptionHandler.java"),
+                moduleGenerator.generateGlobalExceptionHandler(pkg));
 
         if (config.hasFeature(com.scaffold4j.model.Feature.SSE)) {
             FileUtils.writeFile(src.resolve("rest/SseController.java"),

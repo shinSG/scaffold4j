@@ -332,7 +332,9 @@ public class PomGenerator {
                 }
 
                 // Vector store dependency
-                if (config.usesSpringAI() && config.vectorStore().springAiStarter() != null) {
+                if (config.hasFeature(com.scaffold4j.model.Feature.RAG)
+                    && config.usesSpringAI()
+                    && config.vectorStore().springAiStarter() != null) {
                     dependencies.append("""
                             <dependency>
                                 <groupId>org.springframework.ai</groupId>

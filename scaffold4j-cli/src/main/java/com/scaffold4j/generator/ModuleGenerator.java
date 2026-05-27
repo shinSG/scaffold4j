@@ -594,13 +594,22 @@ public class ModuleGenerator {
                     private final LLMProviderType defaultProvider;
 
                     public LLMProviderFactory(List<LLMProviderAdapter> adapters, String defaultProvider) {
+                        if (adapters == null || adapters.isEmpty()) {
+                            throw new IllegalStateException("No LLMProviderAdapter beans were found. Check generated provider adapters and selected AI framework dependencies.");
+                        }
                         this.defaultProvider = LLMProviderType.fromId(defaultProvider);
                         for (LLMProviderAdapter adapter : adapters) {
                             register(LLMProviderType.fromId(adapter.providerName()), adapter);
                         }
+                        if (!this.adapters.containsKey(this.defaultProvider)) {
+                            throw new IllegalStateException("Default LLM provider '" + defaultProvider + "' has no registered adapter. Registered providers: " + this.adapters.keySet());
+                        }
                     }
 
                     public void register(LLMProviderType type, LLMProviderAdapter adapter) {
+                        if (type == null || adapter == null) {
+                            throw new IllegalArgumentException("LLM provider type and adapter must not be null");
+                        }
                         adapters.put(type, adapter);
                     }
 
@@ -614,11 +623,10 @@ public class ModuleGenerator {
 
                     public LLMProviderAdapter getDefaultAdapter() {
                         LLMProviderAdapter adapter = adapters.get(defaultProvider);
-                        if (adapter != null) {
-                            return adapter;
+                        if (adapter == null) {
+                            throw new IllegalStateException("Default LLM provider '" + defaultProvider.id() + "' has no registered adapter. Registered providers: " + adapters.keySet());
                         }
-                        return adapters.values().stream().findFirst()
-                                .orElseThrow(() -> new IllegalStateException("No LLM adapters registered"));
+                        return adapter;
                     }
                 }
                 """.formatted(pkg, pkg, aiFramework);
@@ -1836,14 +1844,72 @@ public class ModuleGenerator {
 
                     public String orchestrate(String task) {
                         // TODO: Select agent strategy based on task complexity
-                        return chatService.chat(
-                                new %s.domain.dto.ChatRequest()).getContent();
+                        %s.domain.dto.ChatRequest request = new %s.domain.dto.ChatRequest();
+                        request.setMessage(task);
+                        return chatService.chat(request).getContent();
                     }
                 }
-                """.formatted(pkg, pkg, pkg);
+                """.formatted(pkg, pkg, pkg, pkg);
     }
 
     // ==================== api module ====================
+
+    public String generateGlobalExceptionHandler(String pkg) {
+        return """
+                package %s.api.exception;
+
+                import %s.common.constant.ErrorCode;
+                import %s.common.exception.BaseException;
+                import %s.common.result.Result;
+                import jakarta.validation.ConstraintViolationException;
+                import org.slf4j.Logger;
+                import org.slf4j.LoggerFactory;
+                import org.springframework.http.HttpStatus;
+                import org.springframework.web.bind.MethodArgumentNotValidException;
+                import org.springframework.web.bind.annotation.ExceptionHandler;
+                import org.springframework.web.bind.annotation.ResponseStatus;
+                import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+                import java.util.stream.Collectors;
+
+                @RestControllerAdvice
+                public class GlobalExceptionHandler {
+
+                    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+                    @ExceptionHandler(BaseException.class)
+                    @ResponseStatus(HttpStatus.BAD_REQUEST)
+                    public Result<Void> handleBaseException(BaseException ex) {
+                        return Result.error(ex.code(), ex.getMessage());
+                    }
+
+                    @ExceptionHandler(MethodArgumentNotValidException.class)
+                    @ResponseStatus(HttpStatus.BAD_REQUEST)
+                    public Result<Void> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
+                        String message = ex.getBindingResult().getFieldErrors().stream()
+                                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                                .collect(Collectors.joining("; "));
+                        return Result.error(ErrorCode.BAD_REQUEST.code(), message.isBlank() ? ErrorCode.BAD_REQUEST.message() : message);
+                    }
+
+                    @ExceptionHandler(ConstraintViolationException.class)
+                    @ResponseStatus(HttpStatus.BAD_REQUEST)
+                    public Result<Void> handleConstraintViolation(ConstraintViolationException ex) {
+                        String message = ex.getConstraintViolations().stream()
+                                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                                .collect(Collectors.joining("; "));
+                        return Result.error(ErrorCode.BAD_REQUEST.code(), message.isBlank() ? ErrorCode.BAD_REQUEST.message() : message);
+                    }
+
+                    @ExceptionHandler(Exception.class)
+                    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+                    public Result<Void> handleException(Exception ex) {
+                        log.error("Unhandled API exception", ex);
+                        return Result.error(ErrorCode.INTERNAL_ERROR.code(), ErrorCode.INTERNAL_ERROR.message());
+                    }
+                }
+                """.formatted(pkg, pkg, pkg, pkg);
+    }
 
     public String generateChatController(String pkg) {
         return """
@@ -2847,9 +2913,9 @@ public class ModuleGenerator {
                         String message = request.getMessage().toLowerCase();
                         if (message.contains("weather") || message.contains("天气")) {
                             request.setMessage(weatherTool.getWeather(message.contains("beijing") || message.contains("北京")
-                                    ? "Beijing" : "Shanghai"));
+                                    ? "Beijing" : "Shanghai", "celsius"));
                         } else if (message.contains("search") || message.contains("搜索")) {
-                            request.setMessage(searchTool.search(message));
+                            request.setMessage(searchTool.search(message, 5).toString());
                         }
                         return chatService.chat(request);
                     }
@@ -2909,8 +2975,8 @@ public class ModuleGenerator {
                      */
                     public String executeTool(String intent, String message) {
                         return switch (intent) {
-                            case "WEATHER" -> weatherTool.getWeather("Shanghai");
-                            case "SEARCH" -> searchTool.search(message);
+                            case "WEATHER" -> weatherTool.getWeather("Shanghai", "celsius");
+                            case "SEARCH" -> searchTool.search(message, 5).toString();
                             case "DATABASE" -> "Found users: " + userService.findAll().size();
                             default -> message;
                         };
