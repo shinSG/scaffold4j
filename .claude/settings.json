@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://api.github.com/repos/langchain4j/langchain4j/contents/langchain4j-agentic-patterns/src/main/java/dev/langchain4j/agentic\")"
+    ]
+  }
+}
