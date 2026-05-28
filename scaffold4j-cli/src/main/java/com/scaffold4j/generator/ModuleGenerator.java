@@ -3426,11 +3426,11 @@ public class ModuleGenerator {
 
     private String generateRabbitMqMessageListener(String pkg) {
         return """
-                package %s.infra.mq;
+                package %s.app.mq;
 
                 import %s.domain.mq.MqAIRequest;
                 import %s.domain.mq.MqMessage;
-                import %s.app.mq.MqAIProcessingService;
+                import %s.infra.mq.MqConfig;
                 import com.fasterxml.jackson.databind.ObjectMapper;
                 import lombok.RequiredArgsConstructor;
                 import lombok.extern.slf4j.Slf4j;
@@ -3461,11 +3461,11 @@ public class ModuleGenerator {
 
     private String generateRocketMqMessageListener(String pkg) {
         return """
-                package %s.infra.mq;
+                package %s.app.mq;
 
                 import %s.domain.mq.MqAIRequest;
                 import %s.domain.mq.MqMessage;
-                import %s.app.mq.MqAIProcessingService;
+                import %s.infra.mq.MqConfig;
                 import com.fasterxml.jackson.databind.ObjectMapper;
                 import lombok.RequiredArgsConstructor;
                 import lombok.extern.slf4j.Slf4j;
@@ -3500,11 +3500,11 @@ public class ModuleGenerator {
 
     private String generateKafkaMqMessageListener(String pkg) {
         return """
-                package %s.infra.mq;
+                package %s.app.mq;
 
                 import %s.domain.mq.MqAIRequest;
                 import %s.domain.mq.MqMessage;
-                import %s.app.mq.MqAIProcessingService;
+                import %s.infra.mq.MqConfig;
                 import lombok.RequiredArgsConstructor;
                 import lombok.extern.slf4j.Slf4j;
                 import org.springframework.kafka.annotation.KafkaListener;
@@ -3568,12 +3568,9 @@ public class ModuleGenerator {
                             log.info("Processing AI request: messageId={}, prompt=\\"{}\\"",
                                     requestMessage.getMessageId(), request.getPrompt());
 
-                            ChatRequest chatRequest = ChatRequest.builder()
-                                    .conversationId(request.getConversationId())
-                                    .message(request.getPrompt())
-                                    .maxTokens(request.getMaxTokens())
-                                    .temperature(request.getTemperature())
-                                    .build();
+                            ChatRequest chatRequest = new ChatRequest();
+                            chatRequest.setConversationId(request.getConversationId());
+                            chatRequest.setMessage(request.getPrompt());
 
                             ChatResponse chatResponse = chatService.chat(chatRequest);
 

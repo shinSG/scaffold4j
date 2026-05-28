@@ -132,6 +132,31 @@ class GeneratorOutputTest {
         assertTrue(source.contains("Result.error(ErrorCode.INTERNAL_ERROR.code(), ErrorCode.INTERNAL_ERROR.message())"));
     }
 
+    @Test
+    void mqListenerIsGeneratedInAppModuleToAvoidInfraDependingOnApp() throws Exception {
+        ProjectConfig config = new ProjectConfig()
+                .name("demo-app")
+                .basePackage("com.example.demo")
+                .mqType(MqType.RABBITMQ)
+                .outputDir(tempDir.toString());
+
+        new ProjectGenerator(config).generate();
+
+        Path appListener = tempDir.resolve("demo-app/demo-app-app/src/main/java/com/example/demo/app/mq/MqMessageListener.java");
+        Path infraListener = tempDir.resolve("demo-app/demo-app-infra/src/main/java/com/example/demo/infra/mq/MqMessageListener.java");
+        assertTrue(Files.exists(appListener));
+        assertFalse(Files.exists(infraListener));
+
+        String source = Files.readString(appListener);
+        assertTrue(source.contains("package com.example.demo.app.mq;"));
+        assertTrue(source.contains("import com.example.demo.infra.mq.MqConfig;"));
+        assertFalse(source.contains("import com.example.demo.app.mq.MqAIProcessingService;"));
+
+        String processingService = Files.readString(tempDir.resolve("demo-app/demo-app-app/src/main/java/com/example/demo/app/mq/MqAIProcessingService.java"));
+        assertTrue(processingService.contains("new ChatRequest()"));
+        assertFalse(processingService.contains("ChatRequest.builder()"));
+    }
+
     private long countTopLevelKey(String yaml, String key) {
         return Pattern.compile("(?m)^" + Pattern.quote(key) + ":\\s*$").matcher(yaml).results().count();
     }

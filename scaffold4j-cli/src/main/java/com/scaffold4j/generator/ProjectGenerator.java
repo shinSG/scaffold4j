@@ -240,8 +240,6 @@ public class ProjectGenerator {
                     moduleGenerator.generateMqConfig(pkg));
             FileUtils.writeFile(src.resolve("mq/MqMessageProducer.java"),
                     moduleGenerator.generateMqMessageProducer(pkg));
-            FileUtils.writeFile(src.resolve("mq/MqMessageListener.java"),
-                    moduleGenerator.generateMqMessageListener(pkg));
         }
     }
 
@@ -320,6 +318,8 @@ public class ProjectGenerator {
         if (config.hasMq()) {
             FileUtils.writeFile(src.resolve("mq/MqAIProcessingService.java"),
                     moduleGenerator.generateMqAIProcessingService(pkg));
+            FileUtils.writeFile(src.resolve("mq/MqMessageListener.java"),
+                    moduleGenerator.generateMqMessageListener(pkg));
         }
 
         FileUtils.writeFile(src.resolve("agent/AgentOrchestrator.java"),
