@@ -408,6 +408,7 @@ public class ProjectGenerator {
                 moduleGenerator.generateApplication(pkg));
 
         FileUtils.writeFile(res.resolve("application.yml"), configGenerator.generateMainConfig());
+        FileUtils.writeFile(res.resolve("llm-config.yml"), configGenerator.generateLlmConfig());
         FileUtils.writeFile(res.resolve("application-dev.yml"), configGenerator.generateDevConfig());
         FileUtils.writeFile(res.resolve("application-prod.yml"), configGenerator.generateProdConfig());
         FileUtils.writeFile(res.resolve("logback-spring.xml"), configGenerator.generateLogbackConfig());
@@ -455,14 +456,20 @@ public class ProjectGenerator {
             sb.append("- Message Queue: ").append(config.mqType().displayName()).append("\n");
         }
         sb.append("\n## Quick Start\n\n");
+        sb.append("### Option 1: Edit the configuration file\n\n");
+        sb.append("Open `bootstrap/src/main/resources/llm-config.yml` and set your API keys\n");
+        sb.append("and preferred models.\n\n");
+        sb.append("### Option 2: Use environment variables\n\n");
         sb.append("```bash\n");
-        sb.append("# Set environment variables for your LLM providers\n");
         for (var p : config.llmProviders()) {
             if (p.envVar() != null) {
                 sb.append("export ").append(p.envVar()).append("=<your-api-key>\n");
             }
         }
-        sb.append("\n# Run the application\n");
+        sb.append("```\n\n");
+        sb.append("Both approaches work — environment variables override file values.\n\n");
+        sb.append("### Run the application\n\n");
+        sb.append("```bash\n");
         sb.append("./mvnw -pl ").append(config.moduleName("bootstrap"))
                 .append(" spring-boot:run\n");
         sb.append("```\n\n");

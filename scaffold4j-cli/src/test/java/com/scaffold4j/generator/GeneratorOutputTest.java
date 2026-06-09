@@ -51,9 +51,64 @@ class GeneratorOutputTest {
         assertTrue(yaml.contains("\n  cloud:\n    nacos:\n"));
         assertTrue(yaml.contains("\nmybatis-plus:\n"));
         assertFalse(section(yaml, "mybatis-plus:", "logging:").contains("\nspring:"));
-        assertTrue(yaml.contains("\nscaffold4j:\n  ai:\n    default-provider:"));
+        // LLM provider config is now in llm-config.yml, not application.yml
+        assertTrue(yaml.contains("import: classpath:llm-config.yml"));
+        assertFalse(yaml.contains("scaffold4j.ai.providers"));
+        assertFalse(yaml.contains("default-provider:"));
         assertTrue(yaml.contains("\n  websocket:\n"));
         assertTrue(yaml.contains("\n  mq:\n"));
+    }
+
+    @Test
+    void llmConfigContainsProviderPropertiesAndIsParseable() throws Exception {
+        ProjectConfig config = new ProjectConfig()
+                .name("demo-app")
+                .basePackage("com.example.demo")
+                .aiFramework(AIFramework.SPRING_AI)
+                .llmProviders(Set.of(LLMProvider.OPENAI, LLMProvider.OLLAMA));
+
+        String llmConfig = new ConfigGenerator(config).generateLlmConfig();
+
+        // Must be valid YAML
+        new ObjectMapper(new YAMLFactory()).readTree(llmConfig);
+
+        // scaffold4j unified provider section
+        assertTrue(llmConfig.contains("scaffold4j:"));
+        assertTrue(llmConfig.contains("default-provider:"));
+        assertTrue(llmConfig.contains("framework: SPRING_AI"));
+        assertTrue(llmConfig.contains("providers:"));
+        assertTrue(llmConfig.contains("openai:"));
+        assertTrue(llmConfig.contains("ollama:"));
+        assertTrue(llmConfig.contains("base-url: https://api.openai.com"));
+        assertTrue(llmConfig.contains("model: gpt-4o"));
+        assertTrue(llmConfig.contains("temperature: 0.7"));
+        assertTrue(llmConfig.contains("max-tokens: 4096"));
+        // API keys use env var references for security
+        assertTrue(llmConfig.contains("api-key: ${OPENAI_API_KEY:}"));
+        assertTrue(llmConfig.contains("api-key: ${OLLAMA_API_KEY:"));
+
+        // Spring AI section present when framework is SPRING_AI
+        assertTrue(llmConfig.contains("spring:"));
+        assertTrue(llmConfig.contains("ai:"));
+        assertTrue(llmConfig.contains("openai:"));
+        assertTrue(llmConfig.contains("options:"));
+    }
+
+    @Test
+    void llmConfigOmitsSpringAiSectionForLangChain4jOnly() {
+        ProjectConfig config = new ProjectConfig()
+                .name("demo-app")
+                .basePackage("com.example.demo")
+                .aiFramework(AIFramework.LANGCHAIN4J)
+                .llmProviders(Set.of(LLMProvider.OPENAI));
+
+        String llmConfig = new ConfigGenerator(config).generateLlmConfig();
+
+        // scaffold4j section present
+        assertTrue(llmConfig.contains("scaffold4j:"));
+        assertTrue(llmConfig.contains("providers:"));
+        // Spring AI section should NOT be present for LangChain4j-only
+        assertFalse(llmConfig.contains("spring:\n  ai:"));
     }
 
     @Test

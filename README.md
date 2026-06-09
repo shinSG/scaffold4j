@@ -16,6 +16,7 @@
 - **异步消息队列**: RabbitMQ / RocketMQ / Kafka，支持请求-应答异步 AI 处理
 - **向量数据库**: PGVector、Milvus、Chroma、Pinecone、Elasticsearch、Redis、Qdrant、Weaviate
 - **配置化管理**: 统一的 `scaffold4j.*` 配置命名空间，所有参数支持环境变量覆盖
+- **LLM 配置文件**: 独立的 `llm-config.yml` 管理 LLM 参数（base_url / api_key / model 等），服务启动前可直接编辑
 
 ## 快速开始
 
@@ -106,7 +107,10 @@ scaffold4j list-providers
 ```bash
 cd my-ai-app
 
-# 设置 LLM API Key
+# 方式一：编辑配置文件（推荐）
+# 打开 bootstrap/src/main/resources/llm-config.yml，设置 API Key 和模型参数
+
+# 方式二：使用环境变量
 export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
 
@@ -168,7 +172,8 @@ my-ai-app/
 │   └── ws/                          # WebSocket Handler (conditional)
 ├── my-ai-app-bootstrap/             # 启动模块: Application + 配置
 │   └── src/main/resources/
-│       ├── application.yml
+│       ├── application.yml          # 主配置（import: llm-config.yml）
+│       ├── llm-config.yml           # LLM 配置文件（编辑此文件设置 API Key、模型等）
 │       ├── application-dev.yml
 │       ├── application-prod.yml
 │       └── logback-spring.xml

@@ -35,7 +35,7 @@ scaffold4j is a **code generation CLI** — it does not use Spring itself. It pr
 3. `ProjectGenerator.generate()` orchestrates file output by calling specialized generators:
    - `PomGenerator` — root POM (aggregator) + per-module POMs with conditional dependencies based on framework/protocol/feature selections
    - `ModuleGenerator` — all Java source files as string templates (embedded as text blocks, not Mustache)
-   - `ConfigGenerator` — `application.yml` and env-specific configs
+   - `ConfigGenerator` — `application.yml`, `llm-config.yml` (LLM provider configuration), and env-specific configs
    - `DockerGenerator` — Dockerfile + docker-compose.yml (conditionally includes services like ollama, postgres/pgvector, nacos)
    - `GitignoreGenerator` — `.gitignore` + `.editorconfig`
 
@@ -60,6 +60,10 @@ scaffold4j is a **code generation CLI** — it does not use Spring itself. It pr
 ├── <name>-app/                # Services, agents, tools, prompt templates
 ├── <name>-api/                # REST/MCP/A2A/ACP/WebSocket controllers
 ├── <name>-bootstrap/          # @SpringBootApplication + config files
+│   └── src/main/resources/
+│       ├── application.yml    # main config (imports llm-config.yml)
+│       ├── llm-config.yml     # LLM provider config (api-key, model, base-url)
+│       └── ...
 └── docker/
 ```
 

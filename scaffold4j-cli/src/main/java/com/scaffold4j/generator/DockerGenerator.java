@@ -54,6 +54,8 @@ public class DockerGenerator {
                       - "${APP_PORT:-8080}:8080"
                     environment:
                       - SPRING_PROFILES_ACTIVE=dev
+                    # LLM configuration: edit bootstrap/src/main/resources/llm-config.yml
+                    # or override with environment variables below.
                 """);
 
         for (LLMProvider provider : config.llmProviders()) {
