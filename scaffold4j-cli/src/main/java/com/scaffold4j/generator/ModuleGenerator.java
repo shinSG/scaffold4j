@@ -273,16 +273,23 @@ public class ModuleGenerator {
                 package %s.domain.model;
 
                 import %s.domain.enums.MessageRole;
+                import lombok.AllArgsConstructor;
+                import lombok.Builder;
+                import lombok.Data;
+                import lombok.NoArgsConstructor;
                 import java.time.Instant;
 
+                @Data
+                @Builder
+                @NoArgsConstructor
+                @AllArgsConstructor
                 public class ChatMessage {
                     private String id;
                     private MessageRole role;
                     private String content;
                     private String conversationId;
-                    private Instant createdAt;
-
-                    public ChatMessage() {}
+                    @Builder.Default
+                    private Instant createdAt = Instant.now();
 
                     public ChatMessage(MessageRole role, String content) {
                         this.role = role;
@@ -301,18 +308,6 @@ public class ModuleGenerator {
                     public static ChatMessage system(String content) {
                         return new ChatMessage(MessageRole.SYSTEM, content);
                     }
-
-                    // getters & setters
-                    public String getId() { return id; }
-                    public void setId(String id) { this.id = id; }
-                    public MessageRole getRole() { return role; }
-                    public void setRole(MessageRole role) { this.role = role; }
-                    public String getContent() { return content; }
-                    public void setContent(String content) { this.content = content; }
-                    public String getConversationId() { return conversationId; }
-                    public void setConversationId(String conversationId) { this.conversationId = conversationId; }
-                    public Instant getCreatedAt() { return createdAt; }
-                    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
                 }
                 """.formatted(pkg, pkg);
     }
@@ -321,38 +316,32 @@ public class ModuleGenerator {
         return """
                 package %s.domain.model;
 
+                import lombok.AllArgsConstructor;
+                import lombok.Builder;
+                import lombok.Data;
+                import lombok.NoArgsConstructor;
                 import java.time.Instant;
                 import java.util.ArrayList;
                 import java.util.List;
 
+                @Data
+                @Builder
+                @NoArgsConstructor
+                @AllArgsConstructor
                 public class Conversation {
                     private String id;
                     private String title;
+                    @Builder.Default
                     private List<ChatMessage> messages = new ArrayList<>();
-                    private Instant createdAt;
-                    private Instant updatedAt;
-
-                    public Conversation() {
-                        this.createdAt = Instant.now();
-                        this.updatedAt = Instant.now();
-                    }
+                    @Builder.Default
+                    private Instant createdAt = Instant.now();
+                    @Builder.Default
+                    private Instant updatedAt = Instant.now();
 
                     public void addMessage(ChatMessage message) {
                         messages.add(message);
                         updatedAt = Instant.now();
                     }
-
-                    // getters & setters
-                    public String getId() { return id; }
-                    public void setId(String id) { this.id = id; }
-                    public String getTitle() { return title; }
-                    public void setTitle(String title) { this.title = title; }
-                    public List<ChatMessage> getMessages() { return messages; }
-                    public void setMessages(List<ChatMessage> messages) { this.messages = messages; }
-                    public Instant getCreatedAt() { return createdAt; }
-                    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
-                    public Instant getUpdatedAt() { return updatedAt; }
-                    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
                 }
                 """.formatted(pkg);
     }
@@ -362,20 +351,19 @@ public class ModuleGenerator {
                 package %s.domain.dto;
 
                 import jakarta.validation.constraints.NotBlank;
+                import lombok.AllArgsConstructor;
+                import lombok.Data;
+                import lombok.NoArgsConstructor;
 
+                @Data
+                @NoArgsConstructor
+                @AllArgsConstructor
                 public class ChatRequest {
                     @NotBlank(message = "Message cannot be blank")
                     private String message;
 
                     private String conversationId;
                     private String provider;
-
-                    public String getMessage() { return message; }
-                    public void setMessage(String message) { this.message = message; }
-                    public String getConversationId() { return conversationId; }
-                    public void setConversationId(String conversationId) { this.conversationId = conversationId; }
-                    public String getProvider() { return provider; }
-                    public void setProvider(String provider) { this.provider = provider; }
                 }
                 """.formatted(pkg);
     }
@@ -384,23 +372,19 @@ public class ModuleGenerator {
         return """
                 package %s.domain.dto;
 
+                import lombok.AllArgsConstructor;
+                import lombok.Data;
+                import lombok.NoArgsConstructor;
+
+                @Data
+                @NoArgsConstructor
+                @AllArgsConstructor
                 public class ChatResponse {
                     private String id;
                     private String content;
                     private String conversationId;
                     private String model;
                     private int tokensUsed;
-
-                    public String getId() { return id; }
-                    public void setId(String id) { this.id = id; }
-                    public String getContent() { return content; }
-                    public void setContent(String content) { this.content = content; }
-                    public String getConversationId() { return conversationId; }
-                    public void setConversationId(String conversationId) { this.conversationId = conversationId; }
-                    public String getModel() { return model; }
-                    public void setModel(String model) { this.model = model; }
-                    public int getTokensUsed() { return tokensUsed; }
-                    public void setTokensUsed(int tokensUsed) { this.tokensUsed = tokensUsed; }
                 }
                 """.formatted(pkg);
     }
@@ -409,27 +393,23 @@ public class ModuleGenerator {
         return """
                 package %s.domain.dto;
 
+                import lombok.AllArgsConstructor;
+                import lombok.Data;
+                import lombok.NoArgsConstructor;
+
+                @Data
+                @NoArgsConstructor
+                @AllArgsConstructor
                 public class StreamData {
                     private String id;
                     private String content;
                     private String event;
                     private boolean done;
 
-                    public StreamData() {}
-
                     public StreamData(String content, String event) {
                         this.content = content;
                         this.event = event;
                     }
-
-                    public String getId() { return id; }
-                    public void setId(String id) { this.id = id; }
-                    public String getContent() { return content; }
-                    public void setContent(String content) { this.content = content; }
-                    public String getEvent() { return event; }
-                    public void setEvent(String event) { this.event = event; }
-                    public boolean isDone() { return done; }
-                    public void setDone(boolean done) { this.done = done; }
                 }
                 """.formatted(pkg);
     }
@@ -497,6 +477,43 @@ public class ModuleGenerator {
     }
 
     public String generateLLMProviderConfig(String pkg) {
+        if (config.usesLangChain4j()) {
+            return """
+                    package %s.infra.config;
+
+                    import %s.infra.llm.LLMProviderFactory;
+                    import %s.infra.llm.LLMProviderAdapter;
+                    import %s.infra.llm.LangChain4jLLMProviderAdapterSupport;
+                    import dev.langchain4j.model.chat.ChatLanguageModel;
+                    import org.springframework.beans.factory.annotation.Value;
+                    import org.springframework.context.annotation.Bean;
+                    import org.springframework.context.annotation.Configuration;
+
+                    import java.util.List;
+
+                    @Configuration
+                    public class LLMProviderConfig {
+
+                        @Bean
+                        public LLMProviderFactory llmProviderFactory(
+                                List<LLMProviderAdapter> adapters,
+                                @Value("${scaffold4j.ai.default-provider:%s}") String defaultProvider) {
+                            return new LLMProviderFactory(adapters, defaultProvider);
+                        }
+
+                        @Bean
+                        public ChatLanguageModel chatLanguageModel(LLMProviderFactory factory) {
+                            LLMProviderAdapter adapter = factory.getDefaultAdapter();
+                            if (adapter instanceof LangChain4jLLMProviderAdapterSupport lc4jAdapter) {
+                                return lc4jAdapter.chatModel();
+                            }
+                            throw new IllegalStateException(
+                                    "Default LLM adapter does not expose ChatLanguageModel. "
+                                    + "Ensure a LangChain4j provider adapter is configured.");
+                        }
+                    }
+                    """.formatted(pkg, pkg, pkg, pkg, config.llmProviders().iterator().next().id());
+        }
         return """
                 package %s.infra.config;
 
@@ -995,7 +1012,7 @@ public class ModuleGenerator {
                  */
                 public abstract class LangChain4jLLMProviderAdapterSupport implements LLMProviderAdapter {
 
-                    protected abstract ChatLanguageModel chatModel();
+                    public abstract ChatLanguageModel chatModel();
 
                     @Override
                     public String invoke(String systemPrompt, String userMessage) {
@@ -1097,7 +1114,7 @@ public class ModuleGenerator {
                     }
 
                     @Override
-                    protected ChatLanguageModel chatModel() {
+                    public ChatLanguageModel chatModel() {
                         return chatModel;
                     }
 
@@ -1468,6 +1485,109 @@ public class ModuleGenerator {
     }
 
     public String generateAgentService(String pkg) {
+        if (config.usesSpringAI() && !config.usesLangChain4j()) {
+            return generateSpringAiAgentService(pkg);
+        } else if (config.usesLangChain4j() && !config.usesSpringAI()) {
+            return generateLangChain4jAgentService(pkg);
+        }
+        // BOTH framework or fallback — simple delegation to ChatService
+        return generateSimpleAgentService(pkg);
+    }
+
+    private String generateSpringAiAgentService(String pkg) {
+        return """
+                package %s.app.service;
+
+                import %s.app.tool.WeatherTool;
+                import %s.app.tool.SearchTool;
+                import %s.domain.dto.ChatRequest;
+                import %s.domain.dto.ChatResponse;
+                import org.springframework.ai.chat.client.ChatClient;
+                import org.springframework.stereotype.Service;
+
+                import java.util.UUID;
+
+                @Service
+                public class AgentService {
+
+                    private final ChatClient chatClient;
+
+                    public AgentService(ChatClient.Builder chatClientBuilder,
+                                        WeatherTool weatherTool,
+                                        SearchTool searchTool) {
+                        this.chatClient = chatClientBuilder
+                                .defaultSystem("You are a helpful AI assistant with access to weather and search tools.")
+                                .defaultTools(weatherTool, searchTool)
+                                .build();
+                    }
+
+                    public ChatResponse execute(ChatRequest request) {
+                        String response = chatClient.prompt()
+                                .user(request.getMessage())
+                                .call()
+                                .content();
+                        ChatResponse cr = new ChatResponse();
+                        cr.setId(UUID.randomUUID().toString());
+                        cr.setContent(response);
+                        cr.setConversationId(request.getConversationId());
+                        return cr;
+                    }
+                }
+                """.formatted(pkg, pkg, pkg, pkg, pkg);
+    }
+
+    private String generateLangChain4jAgentService(String pkg) {
+        return """
+                package %s.app.service;
+
+                import %s.app.tool.WeatherTool;
+                import %s.app.tool.SearchTool;
+                import %s.domain.dto.ChatRequest;
+                import %s.domain.dto.ChatResponse;
+                import dev.langchain4j.model.chat.ChatLanguageModel;
+                import dev.langchain4j.service.AiServices;
+                import dev.langchain4j.service.SystemMessage;
+                import dev.langchain4j.service.UserMessage;
+                import org.springframework.stereotype.Service;
+
+                import java.util.UUID;
+
+                @Service
+                public class AgentService {
+
+                    private final Agent agent;
+
+                    public AgentService(ChatLanguageModel chatLanguageModel,
+                                        WeatherTool weatherTool,
+                                        SearchTool searchTool) {
+                        this.agent = AiServices.builder(Agent.class)
+                                .chatLanguageModel(chatLanguageModel)
+                                .tools(weatherTool, searchTool)
+                                .build();
+                    }
+
+                    public ChatResponse execute(ChatRequest request) {
+                        String response = agent.chat(request.getMessage());
+                        ChatResponse cr = new ChatResponse();
+                        cr.setId(UUID.randomUUID().toString());
+                        cr.setContent(response);
+                        cr.setConversationId(request.getConversationId());
+                        return cr;
+                    }
+
+                    /**
+                     * Declarative AI agent interface using LangChain4j AI Services.
+                     */
+                    public interface Agent {
+                        @SystemMessage("You are a helpful AI assistant with access to weather and search tools.")
+                        @UserMessage("{{message}}")
+                        String chat(String message);
+                    }
+                }
+                """.formatted(pkg, pkg, pkg, pkg, pkg);
+    }
+
+    private String generateSimpleAgentService(String pkg) {
         return """
                 package %s.app.service;
 
@@ -1475,9 +1595,6 @@ public class ModuleGenerator {
                 import %s.domain.dto.ChatResponse;
                 import org.springframework.stereotype.Service;
 
-                /**
-                 * Agent service — orchestrates AI Agent interactions with tool calling.
-                 */
                 @Service
                 public class AgentService {
 
@@ -1488,7 +1605,6 @@ public class ModuleGenerator {
                     }
 
                     public ChatResponse execute(ChatRequest request) {
-                        // TODO: Integrate with AgentOrchestrator for ReAct/Function Calling flow
                         return chatService.chat(request);
                     }
                 }
@@ -1496,15 +1612,19 @@ public class ModuleGenerator {
     }
 
     public String generateWeatherTool(String pkg) {
+        String toolImport = toolAnnotationImport();
+        String toolAnnotation = toolAnnotationOnMethod("Get weather information for a given city");
         return """
                 package %s.app.tool;
 
                 import org.springframework.stereotype.Component;
+                %s
                 import java.util.Map;
 
                 @Component
                 public class WeatherTool {
 
+                    %s
                     public String getWeather(String city, String unit) {
                         // TODO: Integrate with a real weather API
                         return Map.of(
@@ -1515,19 +1635,23 @@ public class ModuleGenerator {
                         ).toString();
                     }
                 }
-                """.formatted(pkg);
+                """.formatted(pkg, toolImport, toolAnnotation);
     }
 
     public String generateSearchTool(String pkg) {
+        String toolImport = toolAnnotationImport();
+        String toolAnnotation = toolAnnotationOnMethod("Search the web for information");
         return """
                 package %s.app.tool;
 
                 import org.springframework.stereotype.Component;
+                %s
                 import java.util.List;
 
                 @Component
                 public class SearchTool {
 
+                    %s
                     public List<String> search(String query, int maxResults) {
                         // TODO: Integrate with a search API (Tavily, SerpAPI, etc.)
                         return List.of(
@@ -1536,7 +1660,29 @@ public class ModuleGenerator {
                         );
                     }
                 }
-                """.formatted(pkg);
+                """.formatted(pkg, toolImport, toolAnnotation);
+    }
+
+    /**
+     * Returns the appropriate import statement for the @Tool annotation based on the configured AI framework.
+     */
+    private String toolAnnotationImport() {
+        if (config.usesLangChain4j() && !config.usesSpringAI()) {
+            return "import dev.langchain4j.agent.tool.Tool;";
+        }
+        // Default to Spring AI (covers SPRING_AI, BOTH, SPRING_AI_ALIBABA)
+        return "import org.springframework.ai.tool.annotation.Tool;";
+    }
+
+    /**
+     * Returns the @Tool annotation string for a method based on the configured AI framework.
+     */
+    private String toolAnnotationOnMethod(String description) {
+        if (config.usesLangChain4j() && !config.usesSpringAI()) {
+            return "@Tool(\"%s\")".formatted(description);
+        }
+        // Default to Spring AI
+        return "@Tool(description = \"%s\")".formatted(description);
     }
 
     public String generatePromptTemplate(String pkg) {
@@ -3616,6 +3762,113 @@ public class ModuleGenerator {
                     }
                 }
                 """.formatted(pkg, pkg, pkg, pkg, pkg, pkg, pkg, pkg);
+    }
+
+    // ==================== test module ====================
+
+    public String generateApplicationTests(String pkg) {
+        return """
+                package %s;
+
+                import org.junit.jupiter.api.Test;
+                import org.springframework.boot.test.context.SpringBootTest;
+
+                @SpringBootTest
+                class ApplicationTests {
+
+                    @Test
+                    void contextLoads() {
+                    }
+                }
+                """.formatted(pkg);
+    }
+
+    public String generateChatControllerTest(String pkg) {
+        return """
+                package %s.api.rest;
+
+                import %s.domain.dto.ChatRequest;
+                import %s.domain.dto.ChatResponse;
+                import %s.app.service.ChatService;
+                import com.fasterxml.jackson.databind.ObjectMapper;
+                import org.junit.jupiter.api.Test;
+                import org.springframework.beans.factory.annotation.Autowired;
+                import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+                import org.springframework.test.context.bean.override.mockito.MockitoBean;
+                import org.springframework.http.MediaType;
+                import org.springframework.test.web.servlet.MockMvc;
+
+                import static org.mockito.ArgumentMatchers.any;
+                import static org.mockito.Mockito.when;
+                import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+                import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+                @WebMvcTest(ChatController.class)
+                class ChatControllerTest {
+
+                    @Autowired
+                    private MockMvc mockMvc;
+
+                    @MockitoBean
+                    private ChatService chatService;
+
+                    @Autowired
+                    private ObjectMapper objectMapper;
+
+                    @Test
+                    void chatReturnsSuccess() throws Exception {
+                        ChatResponse response = new ChatResponse();
+                        response.setId("test-id");
+                        response.setContent("Hello!");
+                        when(chatService.chat(any(ChatRequest.class))).thenReturn(response);
+
+                        ChatRequest request = new ChatRequest();
+                        request.setMessage("Hi");
+
+                        mockMvc.perform(post("/api/v1/chat")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.code").value(0))
+                                .andExpect(jsonPath("$.data.content").value("Hello!"));
+                    }
+
+                    @Test
+                    void chatRejectsBlankMessage() throws Exception {
+                        ChatRequest request = new ChatRequest();
+                        request.setMessage("");
+
+                        mockMvc.perform(post("/api/v1/chat")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isBadRequest());
+                    }
+                }
+                """.formatted(pkg, pkg, pkg, pkg);
+    }
+
+    public String generateTestApplicationYml() {
+        String springDatasource = "";
+        if (config.hasDatabase()) {
+            springDatasource = """
+                    spring:
+                      datasource:
+                        url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL
+                        driver-class-name: org.h2.Driver
+                        username: sa
+                        password:
+                      jpa:
+                        hibernate:
+                          ddl-auto: create-drop
+                    """;
+        }
+        return """
+                # Test profile configuration
+                %s
+                logging:
+                  level:
+                    root: WARN
+                """.formatted(springDatasource);
     }
 
     // ==================== utility ====================

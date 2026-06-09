@@ -6,6 +6,25 @@
 
 ---
 
+## 0. 修复状态 (2026-05-28)
+
+| 编号 | 问题 | 状态 | 修复说明 |
+|------|------|------|----------|
+| P0 | LLM Adapter 空实现 | ✅ 已修复 | Spring AI 使用 ChatClient，LangChain4j 使用 ChatLanguageModel，无框架集成使用 HTTP 直连 |
+| P1 | application.yml 缩进错误 | ✅ 已修复 | 拆分 Redis 缓存 block 为 spring.cache 和 spring.data.redis 独立块 |
+| P1 | LLMProviderConfig 未注册 Adapter | ✅ 已修复 | Factory 构造函数自动注册所有 Adapter Bean |
+| P2 | 缺少测试代码生成 | ✅ 已修复 | 生成 ApplicationTests + ChatControllerTest + application-test.yml |
+| P2 | Tool 未使用 @Tool 注解 | ✅ 已修复 | 根据框架条件生成 Spring AI @Tool 或 LangChain4j @Tool |
+| P2 | Agent 实现过于简化 | ✅ 已修复 | Spring AI: ChatClient + defaultTools; LangChain4j: AiServices + @SystemMessage |
+| P3 | ChatMessage/Conversation 未使用 Lombok | ✅ 已修复 | 添加 @Data @Builder @NoArgsConstructor @AllArgsConstructor |
+| P4 | 缺少全局异常处理器 | ✅ 已修复 | 生成 GlobalExceptionHandler (@RestControllerAdvice) |
+| P4 | 缺少可观测性 | ✅ 已修复 | 添加 micrometer-registry-prometheus + management endpoints |
+| P3 | Memory 仅内存存储 | ⏳ 待修复 | 生产需 Redis/JDBC 实现 |
+| P3 | RAG 文件未生成 | ⏳ 待修复 | 需检查条件判断逻辑 |
+| P5 | ModuleGenerator 巨文件 | ⏳ 待重构 | 拆分为按模块子生成器 |
+
+---
+
 ## 1. 总体评价
 
 ### 1.1 做得好的方面

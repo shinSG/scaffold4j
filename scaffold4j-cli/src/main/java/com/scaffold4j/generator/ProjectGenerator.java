@@ -415,6 +415,17 @@ public class ProjectGenerator {
         if (config.hasNacosConfig()) {
             FileUtils.writeFile(res.resolve("bootstrap.yml"), configGenerator.generateBootstrapConfig());
         }
+
+        // Test files
+        Path testSrc = dir.resolve("src/test/java").resolve(config.packagePath());
+        Path testRes = dir.resolve("src/test/resources");
+
+        FileUtils.writeFile(testSrc.resolve("ApplicationTests.java"),
+                moduleGenerator.generateApplicationTests(pkg));
+        FileUtils.writeFile(testSrc.resolve("api/rest/ChatControllerTest.java"),
+                moduleGenerator.generateChatControllerTest(pkg));
+        FileUtils.writeFile(testRes.resolve("application-test.yml"),
+                moduleGenerator.generateTestApplicationYml());
     }
 
     private void generateDockerFiles() throws IOException {

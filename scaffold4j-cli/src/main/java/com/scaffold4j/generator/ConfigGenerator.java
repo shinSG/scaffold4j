@@ -95,7 +95,8 @@ public class ConfigGenerator {
                         "  type: redis",
                         "  redis:",
                         "    time-to-live: ${CACHE_TTL:3600000}",
-                        "    cache-null-values: false",
+                        "    cache-null-values: false"));
+                spring.append(block(2,
                         "data:",
                         "  redis:",
                         "    host: ${REDIS_HOST:" + config.redisHost() + "}",
@@ -287,6 +288,18 @@ public class ConfigGenerator {
                     %s: DEBUG
                     org.springframework.ai: DEBUG
                 """.formatted(config.basePackage()));
+
+        // Management / Observability
+        topLevel.append("""
+                management:
+                  endpoints:
+                    web:
+                      exposure:
+                        include: health,info,prometheus
+                  endpoint:
+                    health:
+                      show-details: when-authorized
+                """);
 
         sb.append(spring).append("\n");
         sb.append("""

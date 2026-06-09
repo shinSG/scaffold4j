@@ -546,6 +546,11 @@ public class PomGenerator {
 
                 if (config.usesLangChain4j()) {
                     dependencies.append("""
+                            <!-- LangChain4j core (for @Tool annotation and AI Services) -->
+                            <dependency>
+                                <groupId>dev.langchain4j</groupId>
+                                <artifactId>langchain4j</artifactId>
+                            </dependency>
                             <!-- LangGraph4j for Agent Workflow -->
                             <dependency>
                                 <groupId>org.bsc.langgraph4j</groupId>
@@ -598,6 +603,11 @@ public class PomGenerator {
                         <dependency>
                             <groupId>org.springframework.boot</groupId>
                             <artifactId>spring-boot-starter-actuator</artifactId>
+                        </dependency>
+                        <!-- Micrometer Prometheus -->
+                        <dependency>
+                            <groupId>io.micrometer</groupId>
+                            <artifactId>micrometer-registry-prometheus</artifactId>
                         </dependency>
                         <!-- Spring Boot DevTools -->
                         <dependency>
